@@ -1,9 +1,9 @@
-import { useState } from 'react';
+import { useState, useCallback } from 'react';
 import type { RefObject } from 'react';
 import styles from './ArrangeView.module.css';
 import { useTrackStore } from '../../store/trackStore';
-import { useTransportStore } from '../../store/transportStore';
-import { PIXELS_PER_BEAT, BEATS_PER_BAR, TOTAL_WIDTH } from '../../constants';
+import { useTransportStore, usePixelsPerBeat } from '../../store/transportStore';
+import { BEATS_PER_BAR, TOTAL_WIDTH } from '../../constants';
 import * as engine from '../../audio/engine';
 import ClipBlock from './ClipBlock';
 import Ruler from './Ruler';
@@ -19,7 +19,18 @@ export default function ArrangeView({ scrollRef, onScroll }: Props) {
   const moveClip = useTrackStore((s) => s.moveClip);
   const createTracksForClips = useTrackStore((s) => s.createTracksForClips);
   const playheadBeats = useTransportStore((s) => s.playheadBeats);
+  const pixelsPerBeat = usePixelsPerBeat();
+  const setZoomLevel = useTransportStore((s) => s.setZoomLevel);
   const [dragOverTrackId, setDragOverTrackId] = useState<string | null>(null);
+
+  const handleWheel = useCallback((e: React.WheelEvent) => {
+    if (e.altKey) {
+      e.preventDefault();
+      const delta = e.deltaY > 0 ? 0.9 : 1.1; // Scroll down = zoom out, scroll up = zoom in
+      const newZoom = useTransportStore.getState().zoomLevel * delta;
+      setZoomLevel(newZoom);
+    }
+  }, [setZoomLevel]);
 
   const handleBelowDragOver = (e: React.DragEvent) => {
     if (!e.dataTransfer.types.includes('Files')) return;
@@ -39,7 +50,7 @@ export default function ArrangeView({ scrollRef, onScroll }: Props) {
     const scroll = scrollRef.current!;
     const rect = scroll.getBoundingClientRect();
     const contentX = e.clientX - rect.left + scroll.scrollLeft;
-    const startBeat = Math.round((contentX / PIXELS_PER_BEAT) / BEATS_PER_BAR) * BEATS_PER_BAR;
+    const startBeat = Math.round((contentX / pixelsPerBeat) / BEATS_PER_BAR) * BEATS_PER_BAR;
     void Promise.all(
       audioFiles.map(async (file) => {
         const buffer = await engine.decodeFile(file);
@@ -122,7 +133,7 @@ export default function ArrangeView({ scrollRef, onScroll }: Props) {
     if (clipId) {
       const sourceTrackId = e.dataTransfer.getData('text/x-clip-track-id');
       const beatOffset = parseFloat(e.dataTransfer.getData('text/x-clip-beat-offset') || '0');
-      const rawBeat = Math.max(0, contentX / PIXELS_PER_BEAT - beatOffset);
+      const rawBeat = Math.max(0, contentX / pixelsPerBeat - beatOffset);
       // Snap to nearest bar
       const newStartBeat = Math.round(rawBeat / BEATS_PER_BAR) * BEATS_PER_BAR;
       moveClip(clipId, sourceTrackId, trackId, newStartBeat);
@@ -135,7 +146,7 @@ export default function ArrangeView({ scrollRef, onScroll }: Props) {
     if (!file.type.startsWith('audio/') && !file.name.toLowerCase().endsWith('.wav')) return;
 
     // Snap to nearest bar
-    const startBeat = Math.round((contentX / PIXELS_PER_BEAT) / BEATS_PER_BAR) * BEATS_PER_BAR;
+    const startBeat = Math.round((contentX / pixelsPerBeat) / BEATS_PER_BAR) * BEATS_PER_BAR;
 
     void engine.decodeFile(file).then((buffer) => {
       const bufferId = `buf-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
@@ -150,17 +161,17 @@ export default function ArrangeView({ scrollRef, onScroll }: Props) {
     <div className={styles.outer}>
       <div className={styles.scroll} ref={scrollRef} onScroll={onScroll}>
         {/* Content container — full timeline width */}
-        <div className={styles.inner} style={{ width: TOTAL_WIDTH }}>
+        <div className={styles.inner} style={{ width: TOTAL_WIDTH }} onWheel={handleWheel}>
 
           {/* Ruler: sticky vertically, scrolls horizontally with content */}
-          <Ruler scrollRef={scrollRef} />
+          <Ruler pixelsPerBeat={pixelsPerBeat} scrollRef={scrollRef} />
 
           {/* Track lanes */}
           <div className={styles.lanes}>
             {/* Playhead */}
             <div
               className={styles.playhead}
-              style={{ left: playheadBeats * PIXELS_PER_BEAT }}
+              style={{ left: playheadBeats * pixelsPerBeat }}
             />
 
             {tracks.map((track, i) => (

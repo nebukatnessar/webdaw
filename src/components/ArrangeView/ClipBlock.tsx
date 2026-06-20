@@ -1,7 +1,7 @@
 import { useEffect, useRef } from 'react';
 import type { Clip } from '../../types/daw';
 import { getBuffer } from '../../audio/engine';
-import { PIXELS_PER_BEAT } from '../../constants';
+import { usePixelsPerBeat } from '../../store/transportStore';
 import styles from './ClipBlock.module.css';
 
 interface Props {
@@ -10,7 +10,8 @@ interface Props {
 
 export default function ClipBlock({ clip }: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const width = Math.max(1, Math.round(clip.durationBeats * PIXELS_PER_BEAT));
+  const pixelsPerBeat = usePixelsPerBeat();
+  const width = Math.max(1, Math.round(clip.durationBeats * pixelsPerBeat));
 
   const handleDragStart = (e: React.DragEvent<HTMLDivElement>) => {
     // Record where within the clip the user grabbed (in beats) so the drop
@@ -19,7 +20,7 @@ export default function ClipBlock({ clip }: Props) {
     e.dataTransfer.effectAllowed = 'move';
     e.dataTransfer.setData('text/x-clip-id', clip.id);
     e.dataTransfer.setData('text/x-clip-track-id', clip.trackId);
-    e.dataTransfer.setData('text/x-clip-beat-offset', String(offsetPx / PIXELS_PER_BEAT));
+    e.dataTransfer.setData('text/x-clip-beat-offset', String(offsetPx / pixelsPerBeat));
   };
 
   useEffect(() => {
@@ -33,7 +34,7 @@ export default function ClipBlock({ clip }: Props) {
   return (
     <div
       className={styles.clip}
-      style={{ left: clip.startBeat * PIXELS_PER_BEAT, width, background: clip.color }}
+      style={{ left: clip.startBeat * pixelsPerBeat, width, background: clip.color }}
       draggable
       onDragStart={handleDragStart}
     >
