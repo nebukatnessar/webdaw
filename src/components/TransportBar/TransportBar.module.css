@@ -1,0 +1,69 @@
+.bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: var(--transport-height);
+  padding: 0 12px;
+  background: var(--bg-2);
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+.btn {
+  height: 28px;
+  min-width: 32px;
+}
+
+.playBtn {
+  font-size: 15px;
+  width: 36px;
+}
+
+.active {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+
+.active:hover {
+  filter: brightness(1.15);
+  background: var(--accent);
+}
+
+.position {
+  font-family: 'Courier New', monospace;
+  font-size: 17px;
+  font-weight: bold;
+  letter-spacing: 1px;
+  min-width: 64px;
+  padding: 0 8px;
+  color: var(--text);
+}
+
+.bpmLabel {
+  color: var(--text-dim);
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.bpmInput {
+  width: 58px;
+  text-align: center;
+  font-family: 'Courier New', monospace;
+  font-size: 14px;
+}
+
+/* Hide number input spinners */
+.bpmInput::-webkit-inner-spin-button,
+.bpmInput::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+}
+.bpmInput[type='number'] {
+  -moz-appearance: textfield;
+  appearance: textfield;
+}
+
+.addTrackBtn {
+  margin-left: auto;
+}

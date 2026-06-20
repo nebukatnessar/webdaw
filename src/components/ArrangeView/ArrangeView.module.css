@@ -1,0 +1,118 @@
+.outer {
+  flex: 1;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-1);
+}
+
+.scroll {
+  flex: 1;
+  overflow: auto;
+}
+
+/* Full-width timeline container */
+.inner {
+  position: relative;
+  min-height: 100%;
+}
+
+/* Ruler sticks at the top as you scroll down;
+   scrolls horizontally with the content (correct DAW behavior). */
+.ruler {
+  position: sticky;
+  top: 0;
+  height: var(--ruler-height);
+  background: var(--bg-2);
+  border-bottom: 1px solid var(--border);
+  z-index: 5;
+}
+
+.rulerCell {
+  position: absolute;
+  top: 0;
+  height: 100%;
+  width: 160px; /* BEATS_PER_BAR * PIXELS_PER_BEAT */
+  border-left: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  padding-left: 5px;
+  font-size: 10px;
+  color: var(--text-dim);
+  user-select: none;
+  pointer-events: none;
+}
+
+/* Lanes wrapper: contains playhead + track rows */
+.lanes {
+  position: relative;
+}
+
+/* Red playhead line */
+.playhead {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  background: #ff4444;
+  z-index: 10;
+  pointer-events: none;
+  will-change: left;
+}
+
+.lane {
+  height: var(--track-height);
+  position: relative;
+  border-bottom: 1px solid var(--border);
+}
+
+.laneAlt {
+  background: rgba(255, 255, 255, 0.018);
+}
+
+.laneDropTarget {
+  background: rgba(97, 175, 239, 0.1);
+  outline: 1px solid rgba(97, 175, 239, 0.45);
+  outline-offset: -1px;
+}
+
+.emptyDropZone {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 180px;
+  margin: 12px;
+  border: 2px dashed var(--border);
+  border-radius: 6px;
+  color: var(--text-dim);
+  font-size: 12px;
+  text-align: center;
+  line-height: 1.8;
+  user-select: none;
+  transition: border-color 0.12s, background 0.12s, color 0.12s;
+}
+
+.emptyDropZoneOver {
+  border-color: var(--accent);
+  background: rgba(97, 175, 239, 0.08);
+  color: var(--text);
+}
+
+.addTrackZone {
+  height: 52px;
+  display: flex;
+  align-items: center;
+  padding-left: 14px;
+  font-size: 11px;
+  color: var(--text-dim);
+  border-top: 1px dashed var(--border);
+  cursor: default;
+  user-select: none;
+  transition: background 0.12s, color 0.12s, border-top-color 0.12s;
+}
+
+.addTrackZoneOver {
+  background: rgba(97, 175, 239, 0.08);
+  border-top-color: var(--accent);
+  color: var(--text);
+}

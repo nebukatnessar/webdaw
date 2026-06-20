@@ -1,0 +1,143 @@
+.wrapper {
+  width: var(--header-width);
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-1);
+  border-right: 2px solid var(--border);
+  transition: border-color 0.12s, background 0.12s;
+}
+
+.wrapperDropOver {
+  border-right-color: var(--accent);
+  background: color-mix(in srgb, var(--bg-1) 92%, var(--accent) 8%);
+  outline: 1px solid var(--accent);
+  outline-offset: -2px;
+}
+
+.rulerSpacer {
+  height: var(--ruler-height);
+  flex-shrink: 0;
+  background: var(--bg-2);
+  border-bottom: 1px solid var(--border);
+}
+
+.scroll {
+  flex: 1;
+  overflow-y: scroll;
+  overflow-x: hidden;
+  scrollbar-width: none; /* hidden: synced via arrange view scrollbar */
+}
+
+.scroll::-webkit-scrollbar {
+  display: none;
+}
+
+.row {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 6px;
+  height: var(--track-height);
+  padding: 8px 8px;
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+.row:nth-child(even) {
+  background: var(--bg-2);
+}
+
+.rowTop {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  overflow: hidden;
+}
+
+.colorSwatch {
+  width: 4px;
+  height: 36px;
+  border-radius: 2px;
+  flex-shrink: 0;
+}
+
+.name {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.controls {
+  display: flex;
+  gap: 2px;
+  flex-shrink: 0;
+}
+
+.iconBtn {
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  font-size: 10px;
+  font-weight: bold;
+  min-width: unset;
+  border-radius: 2px;
+}
+
+.toggled {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+
+.toggled:hover {
+  background: var(--accent);
+  filter: brightness(1.1);
+}
+
+.removeBtn {
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  font-size: 11px;
+  min-width: unset;
+  border-radius: 2px;
+  color: var(--text-dim);
+  border-color: transparent;
+  background: transparent;
+}
+
+.removeBtn:hover {
+  color: var(--danger);
+  border-color: var(--danger);
+  background: transparent;
+}
+
+.volume {
+  width: 100%;
+  height: 14px;
+}
+
+.empty {
+  padding: 20px 12px;
+  color: var(--text-dim);
+  font-size: 11px;
+  text-align: center;
+  line-height: 1.6;
+}
+
+.dropHint {
+  height: 40px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 10px;
+  color: var(--text-dim);
+  border-top: 1px dashed var(--border);
+  pointer-events: none;
+  user-select: none;
+}
