@@ -22,6 +22,7 @@ export default function Ruler({ scrollRef, pixelsPerBeat }: Props) {
   const dragStartXRef = useRef(0);
   const initialPlayheadRef = useRef(0);
   const justDraggedRef = useRef(false);
+  const hasMovedRef = useRef(false);
 
   const getBeatFromClientX = useCallback((clientX: number): number => {
     const scroll = scrollRef.current!;
@@ -39,13 +40,13 @@ export default function Ruler({ scrollRef, pixelsPerBeat }: Props) {
       pause();
     }
     
-    // Start dragging for selection
+    // Start potential drag
     setIsDragging(true);
     dragStartXRef.current = e.clientX;
     initialPlayheadRef.current = snappedBeat;  // Remember the clicked position
+    hasMovedRef.current = false;  // Reset movement flag
     
     // Don't create selection yet - wait for actual drag movement
-    // Don't move playhead yet - wait to see if it's a drag or click
     
     e.preventDefault();
   }, [isPlaying, pause, getBeatFromClientX]);
@@ -58,6 +59,9 @@ export default function Ruler({ scrollRef, pixelsPerBeat }: Props) {
     const startPos = initialPlayheadRef.current;
     const initialX = dragStartXRef.current;
     const currentX = e.clientX;
+    
+    // Mark that we've moved - this is now a drag, not just a click
+    hasMovedRef.current = true;
     
     // Determine if dragging left or right of the drag start position
     if (currentX < initialX) {
@@ -87,17 +91,20 @@ export default function Ruler({ scrollRef, pixelsPerBeat }: Props) {
       const initialX = dragStartXRef.current;
       const currentX = e.clientX;
       
-      // Finalize selection based on drag direction
-      if (currentX < initialX) {
-        const start = Math.min(snappedBeat, startPos);
-        setSelection(start, startPos);
-        setPlayheadBeats(start);
-      } else {
-        setSelection(startPos, Math.max(snappedBeat, startPos));
-        setPlayheadBeats(startPos);
+      // Only finalize selection if the mouse actually moved
+      if (hasMovedRef.current) {
+        // Finalize selection based on drag direction
+        if (currentX < initialX) {
+          const start = Math.min(snappedBeat, startPos);
+          setSelection(start, startPos);
+          setPlayheadBeats(start);
+        } else {
+          setSelection(startPos, Math.max(snappedBeat, startPos));
+          setPlayheadBeats(startPos);
+        }
+        justDraggedRef.current = true;
       }
       
-      justDraggedRef.current = true;
       setIsDragging(false);
       e.preventDefault();
     }
