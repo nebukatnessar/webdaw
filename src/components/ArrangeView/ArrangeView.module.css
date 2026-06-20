@@ -60,6 +60,18 @@
   will-change: left;
 }
 
+/* Time selection overlay - semi-transparent blue rectangle */
+.selectionOverlay {
+  position: absolute;
+  top: var(--ruler-height);
+  bottom: 0;
+  background: rgba(97, 175, 239, 0.15);
+  border-left: 2px solid var(--accent);
+  border-right: 2px solid var(--accent);
+  z-index: 3;
+  pointer-events: none;
+}
+
 .lane {
   height: var(--track-height);
   position: relative;

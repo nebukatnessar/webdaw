@@ -21,6 +21,8 @@ export default function ArrangeView({ scrollRef, onScroll }: Props) {
   const playheadBeats = useTransportStore((s) => s.playheadBeats);
   const pixelsPerBeat = usePixelsPerBeat();
   const setZoomLevel = useTransportStore((s) => s.setZoomLevel);
+  const selectionStart = useTransportStore((s) => s.selectionStart);
+  const selectionEnd = useTransportStore((s) => s.selectionEnd);
   const [dragOverTrackId, setDragOverTrackId] = useState<string | null>(null);
 
   const handleWheel = useCallback((e: React.WheelEvent) => {
@@ -165,6 +167,17 @@ export default function ArrangeView({ scrollRef, onScroll }: Props) {
 
           {/* Ruler: sticky vertically, scrolls horizontally with content */}
           <Ruler pixelsPerBeat={pixelsPerBeat} scrollRef={scrollRef} />
+
+          {/* Time selection overlay */}
+          {selectionStart !== null && selectionEnd !== null && (
+            <div
+              className={styles.selectionOverlay}
+              style={{
+                left: selectionStart * pixelsPerBeat,
+                width: (selectionEnd - selectionStart) * pixelsPerBeat,
+              }}
+            />
+          )}
 
           {/* Track lanes */}
           <div className={styles.lanes}>

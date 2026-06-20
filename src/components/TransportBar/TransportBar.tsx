@@ -5,7 +5,7 @@ import { useTrackStore } from '../../store/trackStore';
 import * as engine from '../../audio/engine';
 
 export default function TransportBar() {
-  const { bpm, isPlaying, playheadBeats, isRepeat, setBpm, play, pause, stop, setPlayheadBeats, toggleRepeat } =
+  const { bpm, isPlaying, playheadBeats, isRepeat, selectionStart, selectionEnd, setBpm, play, pause, stop, setPlayheadBeats, toggleRepeat } =
     useTransportStore();
   const addTrack = useTrackStore((s) => s.addTrack);
 
@@ -64,7 +64,32 @@ export default function TransportBar() {
     
     const tick = () => {
       const elapsed = engine.getAudioContext().currentTime - anchorCtxTimeRef.current;
-      setPlayheadBeats(anchorBeatsRef.current + (elapsed * bpmRef.current) / 60);
+      let newPlayhead = anchorBeatsRef.current + (elapsed * bpmRef.current) / 60;
+      
+      // Handle repeat between time selection
+      if (isRepeat && selectionStart !== null && selectionEnd !== null) {
+        if (newPlayhead >= selectionEnd) {
+          // Loop back to selection start
+          const loopDuration = selectionEnd - selectionStart;
+          newPlayhead = selectionStart + ((newPlayhead - selectionStart) % loopDuration);
+          
+          // Re-anchor the audio context time to prevent drift
+          const ctx = engine.getAudioContext();
+          const beatsIntoLoop = newPlayhead - selectionStart;
+          anchorCtxTimeRef.current = ctx.currentTime - (beatsIntoLoop * 60 / bpmRef.current);
+          anchorBeatsRef.current = newPlayhead;
+          
+          // Re-schedule playback from the new position
+          engine.stopAllSources();
+          engine.schedulePlayback(
+            useTrackStore.getState().tracks,
+            newPlayhead,
+            bpmRef.current,
+          );
+        }
+      }
+      
+      setPlayheadBeats(newPlayhead);
       rafRef.current = requestAnimationFrame(tick);
     };
     rafRef.current = requestAnimationFrame(tick);
@@ -74,7 +99,7 @@ export default function TransportBar() {
         rafRef.current = null;
       }
     };
-  }, [isPlaying, setPlayheadBeats, bpm, playheadBeats]);
+  }, [isPlaying, setPlayheadBeats, bpm, playheadBeats, isRepeat, selectionStart, selectionEnd]);
 
   const bar = Math.floor(playheadBeats / 4) + 1;
   const beat = (Math.floor(playheadBeats % 4) + 1).toString().padStart(2, '0');
