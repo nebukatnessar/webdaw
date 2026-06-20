@@ -5,7 +5,7 @@ import { useTrackStore } from '../../store/trackStore';
 import * as engine from '../../audio/engine';
 
 export default function TransportBar() {
-  const { bpm, isPlaying, playheadBeats, setBpm, play, pause, stop, setPlayheadBeats } =
+  const { bpm, isPlaying, playheadBeats, isRepeat, setBpm, play, pause, stop, setPlayheadBeats, toggleRepeat } =
     useTransportStore();
   const addTrack = useTrackStore((s) => s.addTrack);
 
@@ -15,6 +15,9 @@ export default function TransportBar() {
   // Keep a ref to bpm so the RAF loop always reads the latest value
   const bpmRef = useRef(bpm);
   bpmRef.current = bpm;
+  
+  // Re-anchor the playhead calculation when BPM changes to prevent drift
+  const lastBpmRef = useRef(bpm);
 
   const handlePlayPause = () => {
     if (isPlaying) {
@@ -50,6 +53,15 @@ export default function TransportBar() {
       }
       return;
     }
+    
+    // When BPM changes during playback, re-anchor to prevent playhead drift
+    if (bpm !== lastBpmRef.current) {
+      const ctx = engine.getAudioContext();
+      anchorCtxTimeRef.current = ctx.currentTime;
+      anchorBeatsRef.current = playheadBeats;
+      lastBpmRef.current = bpm;
+    }
+    
     const tick = () => {
       const elapsed = engine.getAudioContext().currentTime - anchorCtxTimeRef.current;
       setPlayheadBeats(anchorBeatsRef.current + (elapsed * bpmRef.current) / 60);
@@ -62,7 +74,7 @@ export default function TransportBar() {
         rafRef.current = null;
       }
     };
-  }, [isPlaying, setPlayheadBeats]);
+  }, [isPlaying, setPlayheadBeats, bpm, playheadBeats]);
 
   const bar = Math.floor(playheadBeats / 4) + 1;
   const beat = (Math.floor(playheadBeats % 4) + 1).toString().padStart(2, '0');
@@ -83,6 +95,14 @@ export default function TransportBar() {
         title="Stop and return to start"
       >
         ■
+      </button>
+      <button
+        className={`${styles.btn} ${isRepeat ? styles.active : ''}`}
+        onClick={toggleRepeat}
+        aria-label="Toggle repeat"
+        title="Toggle repeat mode"
+      >
+        ↻
       </button>
       <button className={styles.btn} aria-label="Record" title="Record (not yet implemented)">
         ⏺
