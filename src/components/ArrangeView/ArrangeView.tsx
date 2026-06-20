@@ -3,9 +3,10 @@ import type { RefObject } from 'react';
 import styles from './ArrangeView.module.css';
 import { useTrackStore } from '../../store/trackStore';
 import { useTransportStore } from '../../store/transportStore';
-import { PIXELS_PER_BEAT, BEATS_PER_BAR, TOTAL_BARS, TOTAL_WIDTH } from '../../constants';
+import { PIXELS_PER_BEAT, BEATS_PER_BAR, TOTAL_WIDTH } from '../../constants';
 import * as engine from '../../audio/engine';
 import ClipBlock from './ClipBlock';
+import Ruler from './Ruler';
 
 interface Props {
   scrollRef: RefObject<HTMLDivElement | null>;
@@ -18,25 +19,7 @@ export default function ArrangeView({ scrollRef, onScroll }: Props) {
   const moveClip = useTrackStore((s) => s.moveClip);
   const createTracksForClips = useTrackStore((s) => s.createTracksForClips);
   const playheadBeats = useTransportStore((s) => s.playheadBeats);
-  const isPlaying = useTransportStore((s) => s.isPlaying);
-  const setPlayheadBeats = useTransportStore((s) => s.setPlayheadBeats);
-  const pause = useTransportStore((s) => s.pause);
   const [dragOverTrackId, setDragOverTrackId] = useState<string | null>(null);
-
-  const bars = Array.from({ length: TOTAL_BARS }, (_, i) => i);
-
-  const handleRulerClick = (e: React.MouseEvent<HTMLDivElement>) => {
-    const scroll = scrollRef.current!;
-    const rect = scroll.getBoundingClientRect();
-    const contentX = e.clientX - rect.left + scroll.scrollLeft;
-    const rawBeat = contentX / PIXELS_PER_BEAT;
-    const snappedBeat = Math.max(0, Math.round(rawBeat));
-    if (isPlaying) {
-      engine.stopAllSources();
-      pause();
-    }
-    setPlayheadBeats(snappedBeat);
-  };
 
   const handleBelowDragOver = (e: React.DragEvent) => {
     if (!e.dataTransfer.types.includes('Files')) return;
@@ -170,17 +153,7 @@ export default function ArrangeView({ scrollRef, onScroll }: Props) {
         <div className={styles.inner} style={{ width: TOTAL_WIDTH }}>
 
           {/* Ruler: sticky vertically, scrolls horizontally with content */}
-          <div className={styles.ruler} onClick={handleRulerClick} style={{ cursor: 'pointer' }}>
-            {bars.map((bar) => (
-              <div
-                key={bar}
-                className={styles.rulerCell}
-                style={{ left: bar * BEATS_PER_BAR * PIXELS_PER_BEAT }}
-              >
-                {bar + 1}
-              </div>
-            ))}
-          </div>
+          <Ruler scrollRef={scrollRef} />
 
           {/* Track lanes */}
           <div className={styles.lanes}>
