@@ -2,62 +2,371 @@
 # This file defines all labels for the WebDAW repository
 # Format: name: { color: "hex_color", description: "label_description" }
 
-# ============================================
-# 1. EPIC LABELS (High-level goals)
-# Color: Red (e.g., #FF0000)
-# ============================================
+# 1. EPIC LABELS
 epic:core-audio:
   color: "FF0000"
   description: "Core audio engine development"
-
 epic:track-management:
   color: "FF0000"
   description: "Track management system"
-
 epic:editing-tools:
   color: "FF0000"
   description: "Audio editing tools and features"
-
 epic:ui-components:
   color: "FF0000"
   description: "User interface components"
-
 epic:project-management:
   color: "FF0000"
   description: "Project management features"
-
 epic:playback-transport:
   color: "FF0000"
   description: "Playback and transport controls"
-
 epic:effects-plugins:
   color: "FF0000"
   description: "Audio effects and plugins"
-
 epic:collaboration:
   color: "FF0000"
   description: "Real-time and async collaboration features"
-
 epic:advanced-features:
   color: "FF0000"
   description: "Advanced DAW features"
-
 epic:non-functional:
   color: "FF0000"
-  description: "Non-functional requirements (performance, accessibility, etc.)"
+  description: "Non-functional requirements"
 
-# ============================================
-# 2. FEATURE LABELS (Mid-level deliverables)
-# Color: Green (e.g., #00FF00)
-# ============================================
+# 2. FEATURE LABELS
 feature:wav-import:
   color: "00FF00"
   description: "WAV file import functionality"
-
 feature:multi-track-playback:
   color: "00FF00"
   description: "Multi-track audio playback"
-
 feature:time-stretching:
   color: "00FF00"
   description: "Time stretching audio processing"
+feature:track-creation:
+  color: "00FF00"
+  description: "Create and manage audio tracks"
+feature:track-controls:
+  color: "00FF00"
+  description: "Track volume, pan, mute, solo controls"
+feature:track-grouping:
+  color: "00FF00"
+  description: "Group tracks together"
+feature:basic-editing:
+  color: "00FF00"
+  description: "Basic audio editing"
+feature:advanced-editing:
+  color: "00FF00"
+  description: "Advanced editing features"
+feature:timeline-view:
+  color: "00FF00"
+  description: "Timeline/arrangement view"
+feature:mixer-console:
+  color: "00FF00"
+  description: "Mixer console UI"
+feature:piano-roll:
+  color: "00FF00"
+  description: "Piano roll editor for MIDI"
+feature:save-load-projects:
+  color: "00FF00"
+  description: "Save and load project files"
+feature:templates:
+  color: "00FF00"
+  description: "Project templates"
+feature:transport-controls:
+  color: "00FF00"
+  description: "Play, pause, stop, record controls"
+feature:metronome-tempo:
+  color: "00FF00"
+  description: "Metronome and tempo control"
+feature:reverb-effect:
+  color: "00FF00"
+  description: "Reverb audio effect"
+feature:delay-effect:
+  color: "00FF00"
+  description: "Delay audio effect"
+feature:plugin-support:
+  color: "00FF00"
+  description: "Support for audio plugins"
+feature:real-time-collab:
+  color: "00FF00"
+  description: "Real-time collaboration features"
+feature:async-collab:
+  color: "00FF00"
+  description: "Asynchronous collaboration features"
+feature:stem-separation:
+  color: "00FF00"
+  description: "Stem separation audio processing"
+feature:auto-tune:
+  color: "00FF00"
+  description: "Auto-tune/pitch correction"
+feature:version-control:
+  color: "00FF00"
+  description: "Project version control"
+feature:midi-mapping:
+  color: "00FF00"
+  description: "MIDI controller mapping"
+feature:performance-optimization:
+  color: "00FF00"
+  description: "Performance improvements"
+feature:keyboard-shortcuts:
+  color: "00FF00"
+  description: "Keyboard shortcuts"
+feature:screen-reader-support:
+  color: "00FF00"
+  description: "Screen reader accessibility"
+feature:themes:
+  color: "00FF00"
+  description: "UI themes"
+feature:layout-presets:
+  color: "00FF00"
+  description: "Layout presets"
+
+# 3. TASK LABELS
+task:decode-wav-headers:
+  color: "0000FF"
+  description: "Decode WAV file headers"
+task:render-waveform:
+  color: "0000FF"
+  description: "Render audio waveforms"
+task:export-track-wav:
+  color: "0000FF"
+  description: "Export track to WAV"
+task:audio-buffer-management:
+  color: "0000FF"
+  description: "Audio buffer management"
+task:play-pause-stop-controls:
+  color: "0000FF"
+  description: "Play/pause/stop transport controls"
+task:sync-tracks-timeline:
+  color: "0000FF"
+  description: "Sync tracks with timeline"
+task:integrate-time-stretching-lib:
+  color: "0000FF"
+  description: "Integrate time stretching library"
+task:add-pitch-shifting-controls:
+  color: "0000FF"
+  description: "Add pitch shifting UI controls"
+task:add-remove-track-buttons:
+  color: "0000FF"
+  description: "Add/remove track buttons"
+task:duplicate-tracks:
+  color: "0000FF"
+  description: "Duplicate tracks functionality"
+task:volume-sliders:
+  color: "0000FF"
+  description: "Volume slider controls"
+task:mute-solo-buttons:
+  color: "0000FF"
+  description: "Mute and solo buttons"
+task:pan-control:
+  color: "0000FF"
+  description: "Pan control"
+task:group-ungroup-tracks:
+  color: "0000FF"
+  description: "Group/ungroup tracks"
+task:color-coding-groups:
+  color: "0000FF"
+  description: "Color coding for track groups"
+task:cut-copy-paste-regions:
+  color: "0000FF"
+  description: "Cut, copy, paste audio regions"
+task:trim-audio-regions:
+  color: "0000FF"
+  description: "Trim audio regions"
+task:split-regions:
+  color: "0000FF"
+  description: "Split audio regions"
+task:add-fade-in-out:
+  color: "0000FF"
+  description: "Add fade in/out"
+task:crossfade-regions:
+  color: "0000FF"
+  description: "Crossfade between regions"
+task:volume-automation:
+  color: "0000FF"
+  description: "Volume automation"
+task:render-timeline-grid:
+  color: "0000FF"
+  description: "Render timeline grid"
+task:drag-and-drop-regions:
+  color: "0000FF"
+  description: "Drag and drop regions"
+task:virtualized-rendering:
+  color: "0000FF"
+  description: "Virtualized rendering for performance"
+task:mixer-ui-layout:
+  color: "0000FF"
+  description: "Mixer UI layout"
+task:master-track-controls:
+  color: "0000FF"
+  description: "Master track controls"
+task:render-piano-roll-grid:
+  color: "0000FF"
+  description: "Render piano roll grid"
+task:edit-midi-notes:
+  color: "0000FF"
+  description: "Edit MIDI notes"
+task:design-project-file-format:
+  color: "0000FF"
+  description: "Design project file format"
+task:implement-local-storage:
+  color: "0000FF"
+  description: "Implement local storage"
+task:cloud-sync:
+  color: "0000FF"
+  description: "Cloud synchronization"
+task:create-default-templates:
+  color: "0000FF"
+  description: "Create default project templates"
+task:add-transport-buttons:
+  color: "0000FF"
+  description: "Add transport control buttons"
+task:loop-selection-playback:
+  color: "0000FF"
+  description: "Loop selection playback"
+task:implement-metronome:
+  color: "0000FF"
+  description: "Implement metronome"
+task:tempo-automation:
+  color: "0000FF"
+  description: "Tempo automation"
+task:add-reverb-effect:
+  color: "0000FF"
+  description: "Add reverb effect"
+task:add-delay-effect:
+  color: "0000FF"
+  description: "Add delay effect"
+task:research-webaudio-plugins:
+  color: "0000FF"
+  description: "Research WebAudio plugins"
+task:set-up-websocket-server:
+  color: "0000FF"
+  description: "Set up WebSocket server for collaboration"
+task:sync-playhead-position:
+  color: "0000FF"
+  description: "Sync playhead position between collaborators"
+task:export-import-projects:
+  color: "0000FF"
+  description: "Export and import projects"
+task:add-stem-separation:
+  color: "0000FF"
+  description: "Add stem separation feature"
+task:auto-tune-integration:
+  color: "0000FF"
+  description: "Integrate auto-tune"
+task:implement-project-branching:
+  color: "0000FF"
+  description: "Implement project branching"
+task:midi-controller-mapping:
+  color: "0000FF"
+  description: "MIDI controller mapping"
+task:use-web-workers:
+  color: "0000FF"
+  description: "Use Web Workers for background processing"
+task:virtualized-ui-rendering:
+  color: "0000FF"
+  description: "Virtualized UI rendering"
+task:keyboard-shortcuts:
+  color: "0000FF"
+  description: "Implement keyboard shortcuts"
+task:screen-reader-support:
+  color: "0000FF"
+  description: "Add screen reader support"
+task:light-dark-mode:
+  color: "0000FF"
+  description: "Light and dark mode themes"
+task:layout-presets:
+  color: "0000FF"
+  description: "Layout presets"
+
+# 4. PRIORITY LABELS
+priority:p0:
+  color: "FF00FF"
+  description: "Must-have for MVP"
+priority:p1:
+  color: "FFA500"
+  description: "Nice-to-have"
+priority:p2:
+  color: "808080"
+  description: "Future/Backlog"
+
+# 5. TYPE LABELS
+type:epic:
+  color: "ADD8E6"
+  description: "Epic issue type"
+type:feature:
+  color: "ADD8E6"
+  description: "Feature issue type"
+type:task:
+  color: "ADD8E6"
+  description: "Task issue type"
+type:bug:
+  color: "ADD8E6"
+  description: "Bug issue type"
+type:refactor:
+  color: "ADD8E6"
+  description: "Refactoring issue type"
+type:documentation:
+  color: "ADD8E6"
+  description: "Documentation issue type"
+type:chore:
+  color: "ADD8E6"
+  description: "Chore issue type"
+
+# 6. STATUS LABELS
+status:backlog:
+  color: "D3D3D3"
+  description: "In backlog"
+status:ready:
+  color: "FFFF00"
+  description: "Ready to start"
+status:in-progress:
+  color: "00FFFF"
+  description: "Currently in progress"
+status:blocked:
+  color: "FF0000"
+  description: "Blocked"
+status:review:
+  color: "00FF00"
+  description: "In review"
+status:done:
+  color: "008000"
+  description: "Completed"
+
+# 7. COMPLEXITY LABELS
+complexity:low:
+  color: "90EE90"
+  description: "Low complexity"
+complexity:medium:
+  color: "FFD700"
+  description: "Medium complexity"
+complexity:high:
+  color: "FF8C00"
+  description: "High complexity"
+
+# 8. TEAM/OWNER LABELS
+team:frontend:
+  color: "FFC0CB"
+  description: "Frontend team"
+team:backend:
+  color: "FFC0CB"
+  description: "Backend team"
+team:devops:
+  color: "FFC0CB"
+  description: "DevOps team"
+owner:@nebukatnessar:
+  color: "FFC0CB"
+  description: "Owned by @nebukatnessar"
+
+# 9. DEPENDENCY LABELS
+depends-on:web-audio-api:
+  color: "A0522D"
+  description: "Depends on Web Audio API"
+depends-on:backend-api:
+  color: "A0522D"
+  description: "Depends on backend API"
+depends-on:ui-framework:
+  color: "A0522D"
+  description: "Depends on UI framework"
