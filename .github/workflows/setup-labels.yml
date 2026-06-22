@@ -1,0 +1,66 @@
+name: Setup Labels
+
+on:
+  push:
+    paths:
+      - ".github/labels.yml"
+  workflow_dispatch:
+
+jobs:
+  create-labels:
+    runs-on: ubuntu-latest
+    permissions:
+      issues: write
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install dependencies
+        run: npm install js-yaml
+
+      - name: Create GitHub labels
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const yaml = require('js-yaml');
+            
+            const labelsYaml = fs.readFileSync('.github/labels.yml', 'utf8');
+            const labelsConfig = yaml.load(labelsYaml);
+            
+            const { repo } = context;
+            
+            for (const [labelName, config] of Object.entries(labelsConfig)) {
+              const color = config.color;
+              const description = config.description;
+              
+              try {
+                await github.rest.issues.createLabel({
+                  owner: repo.owner,
+                  repo: repo.repo,
+                  name: labelName,
+                  color: color,
+                  description: description
+                });
+                console.log(`Created/updated label: ${labelName}`);
+              } catch (error) {
+                if (error.message.includes('already_exists')) {
+                  await github.rest.issues.updateLabel({
+                    owner: repo.owner,
+                    repo: repo.repo,
+                    current_name: labelName,
+                    name: labelName,
+                    color: color,
+                    description: description
+                  });
+                  console.log(`Updated label: ${labelName}`);
+                } else {
+                  console.error(`Error with label ${labelName}: ${error.message}`);
+                }
+              }
+            }
