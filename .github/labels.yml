@@ -1,0 +1,63 @@
+# WebDAW GitHub Labels Configuration
+# This file defines all labels for the WebDAW repository
+# Format: name: { color: "hex_color", description: "label_description" }
+
+# ============================================
+# 1. EPIC LABELS (High-level goals)
+# Color: Red (e.g., #FF0000)
+# ============================================
+epic:core-audio:
+  color: "FF0000"
+  description: "Core audio engine development"
+
+epic:track-management:
+  color: "FF0000"
+  description: "Track management system"
+
+epic:editing-tools:
+  color: "FF0000"
+  description: "Audio editing tools and features"
+
+epic:ui-components:
+  color: "FF0000"
+  description: "User interface components"
+
+epic:project-management:
+  color: "FF0000"
+  description: "Project management features"
+
+epic:playback-transport:
+  color: "FF0000"
+  description: "Playback and transport controls"
+
+epic:effects-plugins:
+  color: "FF0000"
+  description: "Audio effects and plugins"
+
+epic:collaboration:
+  color: "FF0000"
+  description: "Real-time and async collaboration features"
+
+epic:advanced-features:
+  color: "FF0000"
+  description: "Advanced DAW features"
+
+epic:non-functional:
+  color: "FF0000"
+  description: "Non-functional requirements (performance, accessibility, etc.)"
+
+# ============================================
+# 2. FEATURE LABELS (Mid-level deliverables)
+# Color: Green (e.g., #00FF00)
+# ============================================
+feature:wav-import:
+  color: "00FF00"
+  description: "WAV file import functionality"
+
+feature:multi-track-playback:
+  color: "00FF00"
+  description: "Multi-track audio playback"
+
+feature:time-stretching:
+  color: "00FF00"
+  description: "Time stretching audio processing"
