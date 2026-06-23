@@ -17,6 +17,14 @@ interface TransportState {
   setZoomLevel: (zoomLevel: number) => void;
   setSelection: (start: number | null, end: number | null) => void;
   clearSelection: () => void;
+  setTransportState: (state: {
+    bpm: number;
+    playheadBeats: number;
+    isRepeat: boolean;
+    zoomLevel: number;
+    selectionStart: number | null;
+    selectionEnd: number | null;
+  }) => void;
 }
 
 export const useTransportStore = create<TransportState>((set) => ({
@@ -36,6 +44,14 @@ export const useTransportStore = create<TransportState>((set) => ({
   setZoomLevel: (zoomLevel) => set({ zoomLevel: Math.max(0.1, Math.min(10, zoomLevel)) }),
   setSelection: (start, end) => set({ selectionStart: start, selectionEnd: end }),
   clearSelection: () => set({ selectionStart: null, selectionEnd: null }),
+  setTransportState: (state) => set({
+    bpm: state.bpm,
+    playheadBeats: state.playheadBeats,
+    isRepeat: state.isRepeat,
+    zoomLevel: state.zoomLevel,
+    selectionStart: state.selectionStart,
+    selectionEnd: state.selectionEnd,
+  }),
 }));
 
 // Base pixels per beat (at zoom level 1)

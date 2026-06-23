@@ -2,16 +2,25 @@ import { useState, useEffect, useRef } from 'react';
 import styles from './TransportBar.module.css';
 import { useTransportStore } from '../../store/transportStore';
 import { useTrackStore } from '../../store/trackStore';
+import { useProjectStore } from '../../store/projectStore';
 import * as engine from '../../audio/engine';
 import ExportDialog from '../ExportDialog/ExportDialog';
+import ProjectDialog from '../ProjectDialog/ProjectDialog';
 import type { Project } from '../../types/daw';
+import type { Project as FullProject } from '../../types/project';
 
 export default function TransportBar() {
-  const { bpm, isPlaying, playheadBeats, isRepeat, selectionStart, selectionEnd, setBpm, play, pause, stop, setPlayheadBeats, toggleRepeat } =
+  const { bpm, isPlaying, playheadBeats, isRepeat, zoomLevel, selectionStart, selectionEnd, setBpm, play, pause, stop, setPlayheadBeats, toggleRepeat, setTransportState } =
     useTransportStore();
   const tracks = useTrackStore((s) => s.tracks);
+  const setTracks = useTrackStore((s) => s.setTracks);
   const addTrack = useTrackStore((s) => s.addTrack);
+  const clearTracks = useTrackStore((s) => s.clearTracks);
+  
+  const projectStore = useProjectStore();
+  
   const [showExportDialog, setShowExportDialog] = useState(false);
+  const [showProjectDialog, setShowProjectDialog] = useState<false | 'save' | 'load' | 'new' | 'open'>(false);
 
   const rafRef = useRef<number | null>(null);
   const anchorCtxTimeRef = useRef(0);
@@ -30,9 +39,9 @@ export default function TransportBar() {
       await engine.resumeContext();
       const ctx = engine.getAudioContext();
       anchorCtxTimeRef.current = ctx.currentTime;
-      anchorBeatsRef.current = useTransportStore.getState().playheadBeats;
+      anchorBeatsRef.current = playheadBeats;
       engine.schedulePlayback(
-        useTrackStore.getState().tracks,
+        tracks,
         anchorBeatsRef.current,
         bpmRef.current,
       );
@@ -111,9 +120,47 @@ export default function TransportBar() {
   const bar = Math.floor(playheadBeats / 4) + 1;
   const beat = (Math.floor(playheadBeats % 4) + 1).toString().padStart(2, '0');
 
+  // Get transport state for saving
+  const transportState = {
+    bpm,
+    playheadBeats,
+    isRepeat,
+    zoomLevel,
+    selectionStart,
+    selectionEnd,
+  };
+
   return (
     <>
       <div className={styles.bar}>
+        {/* Project buttons */}
+        <button
+          className={styles.btn + ' ' + styles.projectBtn}
+          onClick={() => setShowProjectDialog('new')}
+          aria-label="New Project"
+          title="New Project (Ctrl+N)"
+        >
+          📄 New
+        </button>
+        <button
+          className={styles.btn + ' ' + styles.projectBtn}
+          onClick={() => setShowProjectDialog('load')}
+          aria-label="Open Project"
+          title="Open Project (Ctrl+O)"
+        >
+          📂 Open
+        </button>
+        <button
+          className={styles.btn + ' ' + styles.projectBtn}
+          onClick={() => setShowProjectDialog('save')}
+          aria-label="Save Project"
+          title="Save Project (Ctrl+S)"
+        >
+          💾 Save
+        </button>
+
+        <div className={styles.divider} />
+
         <button
           className={styles.btn + ' ' + (isPlaying ? styles.active : '')}
           onClick={handlePlayPause}
@@ -170,6 +217,13 @@ export default function TransportBar() {
           onClose={() => setShowExportDialog(false)}
           project={project}
           tracks={tracks}
+        />
+      )}
+
+      {showProjectDialog && (
+        <ProjectDialog
+          onClose={() => setShowProjectDialog(false)}
+          mode={showProjectDialog}
         />
       )}
     </>

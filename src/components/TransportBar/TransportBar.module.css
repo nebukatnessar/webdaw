@@ -64,6 +64,13 @@
   appearance: textfield;
 }
 
+.divider {
+  width: 1px;
+  height: 20px;
+  background: var(--border);
+  margin: 0 4px;
+}
+
 .addTrackBtn {
   margin-left: auto;
 }
@@ -75,4 +82,13 @@
 
 .exportBtn:hover {
   background: #7e88e6;
+}
+
+.projectBtn {
+  background: #4a5568;
+  color: white;
+}
+
+.projectBtn:hover {
+  background: #6b778c;
 }

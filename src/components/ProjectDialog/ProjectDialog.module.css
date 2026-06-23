@@ -1,0 +1,249 @@
+.overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.7);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  backdrop-filter: blur(4px);
+}
+
+.dialog {
+  background: #1a1a2e;
+  border-radius: 12px;
+  padding: 24px;
+  width: 90%;
+  max-width: 500px;
+  max-height: 80vh;
+  overflow-y: auto;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+  color: #fff;
+}
+
+.title {
+  margin: 0 0 20px;
+  font-size: 1.5rem;
+  font-weight: 600;
+  color: #fff;
+  text-align: center;
+}
+
+.error {
+  background: #e06c75;
+  color: white;
+  padding: 10px 14px;
+  border-radius: 6px;
+  margin-bottom: 16px;
+  font-size: 0.9rem;
+}
+
+.field {
+  margin-bottom: 16px;
+}
+
+.label {
+  display: block;
+  margin-bottom: 6px;
+  font-size: 0.9rem;
+  color: #888;
+  font-weight: 500;
+}
+
+.input {
+  width: 100%;
+  padding: 10px 12px;
+  background: #16213e;
+  border: 1px solid #0f3460;
+  border-radius: 6px;
+  color: #fff;
+  font-size: 1rem;
+  outline: none;
+  transition: border-color 0.2s;
+}
+
+.input:focus {
+  border-color: #538bf5;
+}
+
+.input::placeholder {
+  color: #555;
+}
+
+.section {
+  margin-bottom: 20px;
+}
+
+.sectionTitle {
+  font-size: 0.9rem;
+  color: #888;
+  margin-bottom: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.empty {
+  color: #555;
+  font-style: italic;
+  text-align: center;
+  padding: 10px;
+}
+
+.projectList {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.projectItem {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 12px;
+  background: #16213e;
+  border-radius: 6px;
+  margin-bottom: 8px;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.projectItem:hover {
+  background: #0f3460;
+}
+
+.projectItem.selected {
+  background: #0f3460;
+  border: 1px solid #538bf5;
+}
+
+.projectName {
+  font-weight: 500;
+}
+
+.projectDate {
+  font-size: 0.8rem;
+  color: #666;
+}
+
+.divider {
+  display: flex;
+  align-items: center;
+  margin: 12px 0;
+  color: #555;
+  font-size: 0.85rem;
+}
+
+.divider::before,
+.divider::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: #333;
+  margin: 0 10px;
+}
+
+.helpText {
+  color: #666;
+  font-size: 0.85rem;
+  margin-bottom: 10px;
+}
+
+.importBtn {
+  display: inline-block;
+  padding: 10px 20px;
+  background: #16213e;
+  border: 1px solid #0f3460;
+  border-radius: 6px;
+  color: #fff;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.importBtn:hover {
+  background: #0f3460;
+}
+
+.folderPicker {
+  margin-top: 16px;
+  padding: 12px;
+  background: #16213e;
+  border-radius: 6px;
+  text-align: center;
+}
+
+.folderPicker p {
+  margin: 0 0 10px;
+  color: #888;
+  font-size: 0.9rem;
+}
+
+.openFolderBtn {
+  padding: 10px 20px;
+  background: #538bf5;
+  border: none;
+  border-radius: 6px;
+  color: #fff;
+  cursor: pointer;
+  font-size: 0.95rem;
+  transition: background 0.2s;
+}
+
+.openFolderBtn:hover {
+  background: #6aa6f8;
+}
+
+.openFolderBtn:disabled {
+  background: #333;
+  cursor: not-allowed;
+}
+
+.actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 20px;
+  padding-top: 16px;
+  border-top: 1px solid #333;
+}
+
+.cancelBtn {
+  padding: 10px 20px;
+  background: transparent;
+  border: 1px solid #555;
+  border-radius: 6px;
+  color: #888;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.cancelBtn:hover:not(:disabled) {
+  background: #333;
+  color: #fff;
+}
+
+.saveBtn,
+.createBtn {
+  padding: 10px 20px;
+  background: #538bf5;
+  border: none;
+  border-radius: 6px;
+  color: #fff;
+  cursor: pointer;
+  font-weight: 500;
+  transition: background 0.2s;
+}
+
+.saveBtn:hover:not(:disabled),
+.createBtn:hover:not(:disabled) {
+  background: #6aa6f8;
+}
+
+.saveBtn:disabled,
+.createBtn:disabled,
+.cancelBtn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}

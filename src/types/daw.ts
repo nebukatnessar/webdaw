@@ -6,6 +6,7 @@ export interface Clip {
   name: string;
   color: string;
   audioBufferId?: string;
+  audioFile?: string | null; // File path for saved projects
 }
 
 export interface Track {

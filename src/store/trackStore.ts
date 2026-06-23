@@ -8,6 +8,8 @@ interface TrackState {
   addTrack: () => void;
   removeTrack: (id: string) => void;
   updateTrack: (id: string, patch: Partial<Track>) => void;
+  setTracks: (tracks: Track[]) => void;
+  clearTracks: () => void;
   addClip: (
     trackId: string,
     startBeat: number,
@@ -129,4 +131,8 @@ export const useTrackStore = create<TrackState>((set) => ({
       });
       return { tracks: [...state.tracks, ...newTracks] };
     }),
+
+  setTracks: (tracks) => set({ tracks }),
+
+  clearTracks: () => set({ tracks: [] }),
 }));

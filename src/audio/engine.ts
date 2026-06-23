@@ -22,6 +22,14 @@ export function getBuffer(id: string): AudioBuffer | undefined {
   return bufferMap.get(id);
 }
 
+export function getBufferMap(): Map<string, AudioBuffer> {
+  return new Map(bufferMap);
+}
+
+export function clearAllBuffers(): void {
+  bufferMap.clear();
+}
+
 export async function decodeFile(file: File): Promise<AudioBuffer> {
   const ctx = getAudioContext();
   const arrayBuffer = await file.arrayBuffer();
