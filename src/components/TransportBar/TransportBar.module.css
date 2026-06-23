@@ -67,3 +67,12 @@
 .addTrackBtn {
   margin-left: auto;
 }
+
+.exportBtn {
+  background: #5c6bc0;
+  color: white;
+}
+
+.exportBtn:hover {
+  background: #7e88e6;
+}
