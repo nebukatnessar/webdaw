@@ -23,14 +23,12 @@ export default function ProjectDialog({ onClose, mode }: ProjectDialogProps) {
   const clearTracks = useTrackStore((s) => s.clearTracks);
   
   // Transport store
-  const transportState: ProjectTransportState = useTransportStore((s) => ({
-    bpm: s.bpm,
-    playheadBeats: s.playheadBeats,
-    isRepeat: s.isRepeat,
-    zoomLevel: s.zoomLevel,
-    selectionStart: s.selectionStart,
-    selectionEnd: s.selectionEnd,
-  }));
+  const bpm = useTransportStore((s) => s.bpm);
+  const playheadBeats = useTransportStore((s) => s.playheadBeats);
+  const isRepeat = useTransportStore((s) => s.isRepeat);
+  const zoomLevel = useTransportStore((s) => s.zoomLevel);
+  const selectionStart = useTransportStore((s) => s.selectionStart);
+  const selectionEnd = useTransportStore((s) => s.selectionEnd);
   const setTransportState = useTransportStore((s) => s.setTransportState);
   
   // Project store
@@ -51,7 +49,14 @@ export default function ProjectDialog({ onClose, mode }: ProjectDialogProps) {
     setError(null);
     
     try {
-      await projectStore.saveCurrentProject(tracks, transportState, name.trim());
+      await projectStore.saveCurrentProject(tracks, {
+        bpm,
+        playheadBeats,
+        isRepeat,
+        zoomLevel,
+        selectionStart,
+        selectionEnd,
+      }, name.trim());
       onClose();
     } catch (e) {
       // User cancelled - that's fine
@@ -62,7 +67,7 @@ export default function ProjectDialog({ onClose, mode }: ProjectDialogProps) {
     } finally {
       setIsLoading(false);
     }
-  }, [name, tracks, transportState, projectStore, onClose]);
+  }, [name, tracks, bpm, playheadBeats, isRepeat, zoomLevel, selectionStart, selectionEnd, projectStore, onClose]);
 
   const handleNewProject = useCallback(async () => {
     setIsLoading(true);
