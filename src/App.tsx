@@ -1,10 +1,11 @@
-import { useRef, useEffect, useCallback } from 'react';
+import { useRef, useEffect, useCallback, useState } from 'react';
 import styles from './App.module.css';
 import TransportBar from './components/TransportBar/TransportBar';
 import TrackHeaderList from './components/TrackHeaderList/TrackHeaderList';
 import ArrangeView from './components/ArrangeView/ArrangeView';
 import { useTransportStore } from './store/transportStore';
 import { useTrackStore } from './store/trackStore';
+import { useProjectStore } from './store/projectStore';
 import * as engine from './audio/engine';
 
 function App() {
@@ -14,6 +15,8 @@ function App() {
   const syncingRef = useRef(false);
   const { isPlaying, play, pause, bpm } = useTransportStore();
   const tracks = useTrackStore((s) => s.tracks);
+  const projectStore = useProjectStore();
+  const [restoreAttempted, setRestoreAttempted] = useState(false);
   
   const anchorCtxTimeRef = useRef(0);
   const anchorBeatsRef = useRef(0);
@@ -40,6 +43,28 @@ function App() {
     };
     void startAudio();
   }, [isPlaying, pause, play, tracks]);
+
+  // Auto-restore last opened project on app startup (F5 refresh)
+  useEffect(() => {
+    if (restoreAttempted) return;
+    
+    const restoreProject = async () => {
+      try {
+        await projectStore.restoreLastOpenedProject();
+      } catch (e) {
+        console.log('Auto-restore of last project failed or was cancelled:', e);
+      } finally {
+        setRestoreAttempted(true);
+      }
+    };
+    
+    // Add a small delay to let the app fully initialize
+    const timer = setTimeout(() => {
+      restoreProject();
+    }, 500);
+    
+    return () => clearTimeout(timer);
+  }, [projectStore, restoreAttempted]);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {

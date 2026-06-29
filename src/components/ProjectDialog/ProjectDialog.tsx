@@ -4,8 +4,6 @@ import { useProjectStore } from '../../store/projectStore';
 import { useTrackStore } from '../../store/trackStore';
 import { useTransportStore } from '../../store/transportStore';
 import * as engine from '../../audio/engine';
-import type { Track } from '../../types/daw';
-import type { ProjectTransportState } from '../../types/project';
 
 export interface ProjectDialogProps {
   onClose: () => void;
@@ -38,6 +36,7 @@ export default function ProjectDialog({ onClose, mode }: ProjectDialogProps) {
 
   // For load mode, we need to handle folder selection
   const [showFolderPicker, setShowFolderPicker] = useState(false);
+  const lastUsedDirectory = projectStore.getLastUsedDirectory();
 
   const handleSave = useCallback(async () => {
     if (!name.trim()) {
@@ -58,9 +57,9 @@ export default function ProjectDialog({ onClose, mode }: ProjectDialogProps) {
         selectionEnd,
       }, name.trim());
       onClose();
-    } catch (e) {
+    } catch (e: unknown) {
       // User cancelled - that's fine
-      if (e.name !== 'AbortError') {
+      if ((e as Error).name !== 'AbortError') {
         const message = e instanceof Error ? e.message : 'Failed to save project';
         setError(message);
       }
@@ -95,7 +94,7 @@ export default function ProjectDialog({ onClose, mode }: ProjectDialogProps) {
     
     try {
       // Show folder picker
-      const folderHandle = await window.showDirectoryPicker({
+      const folderHandle = await (window as any).showDirectoryPicker({
         mode: 'readonly',
         startIn: 'documents',
       });
@@ -115,8 +114,8 @@ export default function ProjectDialog({ onClose, mode }: ProjectDialogProps) {
       });
       
       onClose();
-    } catch (e) {
-      if (e.name !== 'AbortError') {
+    } catch (e: unknown) {
+      if ((e as Error).name !== 'AbortError') {
         setError('Failed to load project');
       }
     } finally {
@@ -199,6 +198,15 @@ export default function ProjectDialog({ onClose, mode }: ProjectDialogProps) {
                 autoFocus
               />
             </div>
+            
+            {lastUsedDirectory && (
+              <div className={styles.field}>
+                <p className={styles.helpText}>
+                  Projects will be saved to: {lastUsedDirectory.name || 'WebDaw Projects'}
+                </p>
+              </div>
+            )}
+            
             <div className={styles.actions}>
               <button className={styles.cancelBtn} onClick={onClose} disabled={isLoading}>
                 Cancel
