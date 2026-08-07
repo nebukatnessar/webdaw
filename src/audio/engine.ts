@@ -49,9 +49,17 @@ export function schedulePlayback(
   const ctx = getAudioContext();
   const now = ctx.currentTime;
   const beatsToSecs = 60 / bpm;
+  const hasSoloed = tracks.some((t) => t.soloed);
 
   for (const track of tracks) {
-    if (track.muted) continue;
+    if (hasSoloed ? !track.soloed : track.muted) continue;
+
+    const gainNode = ctx.createGain();
+    gainNode.gain.value = track.volume;
+    const panner = ctx.createStereoPanner();
+    panner.pan.value = track.pan;
+    gainNode.connect(panner);
+    panner.connect(ctx.destination);
 
     for (const clip of track.clips) {
       if (!clip.audioBufferId) continue;
@@ -71,7 +79,7 @@ export function schedulePlayback(
 
       const source = ctx.createBufferSource();
       source.buffer = buffer;
-      source.connect(ctx.destination);
+      source.connect(gainNode);
       source.start(when, offset, duration);
 
       activeSources.push(source);

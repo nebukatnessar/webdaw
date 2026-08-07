@@ -212,15 +212,11 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
     if (state.fileStructure) {
       try {
         // Save to existing file system location
-        if (state.fileStructure.folderHandle) {
-          await saveProjectToFileSystem(serialized, state.fileStructure.folderHandle);
-        } else {
+        if (!state.fileStructure.folderHandle) {
           throw new Error('No folder handle available for existing project');
         }
-        
-        // Save all audio buffers to the project
-        await saveAllAudioBuffers(state.fileStructure.audioDirHandle);
-        
+        await saveProjectWithAudio(tracks, serialized, state.fileStructure.folderHandle);
+
         // Update metadata
         saveProjectMetadata({
           id: projectId,
@@ -259,11 +255,8 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
         const projectFolderHandle = await state.lastUsedDirectory.getDirectoryHandle(projectName, { create: true });
         
         // Save project to the project subfolder
-        const structure = await saveProjectToFileSystem(serialized, projectFolderHandle);
-        
-        // Save all audio buffers to the project
-        await saveAllAudioBuffers(structure.audioDirHandle);
-        
+        const structure = await saveProjectWithAudio(tracks, serialized, projectFolderHandle);
+
         // Update metadata
         saveProjectMetadata({
           id: projectId,
@@ -271,7 +264,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
           createdAt: now,
           updatedAt: now,
         });
-        
+
         set({
           currentProjectId: projectId,
           currentProjectName: projectName,
@@ -313,11 +306,8 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
       const projectFolderHandle = await baseDirHandle.getDirectoryHandle(projectName, { create: true });
       
       // Save project to the project subfolder (not the base directory directly)
-      const structure = await saveProjectToFileSystem(serialized, projectFolderHandle);
-      
-      // Save all audio buffers to the project
-      await saveAllAudioBuffers(structure.audioDirHandle);
-      
+      const structure = await saveProjectWithAudio(tracks, serialized, projectFolderHandle);
+
       // Update metadata
       saveProjectMetadata({
         id: projectId,
@@ -354,6 +344,10 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
   },
 
   loadProject: async (folderHandle) => {
+    // Discard buffers from whatever project was previously loaded so they
+    // don't leak into this project's buffer map (and its next save).
+    engine.clearAllBuffers();
+
     const serialized = await loadProjectFromFileSystem(folderHandle);
     const tracks = convertToTracks(serialized.tracks);
     
@@ -496,22 +490,36 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
   },
 }));
 
-// Helper to save all audio buffers to a project
-async function saveAllAudioBuffers(audioDirHandle: FileSystemDirectoryHandle | null): Promise<void> {
-  if (!audioDirHandle) return;
-  
-  const bufferMap = engine.getBufferMap();
-  
-  for (const [bufferId, buffer] of bufferMap) {
-    try {
-      // Extract clip ID from buffer ID if possible
-      // Buffer IDs are like "buf-{timestamp}-{random}"
-      const clipId = bufferId.replace(/^buf-/, '');
-      await saveAudioToProject(audioDirHandle, buffer, clipId, '');
-    } catch (e) {
-      console.error(`Failed to save buffer ${bufferId}:`, e);
+// Save the project's audio buffers (keyed by clip, not by the whole global
+// buffer map) and link each saved file back onto the serialized clip before
+// writing project.json, then write the project file.
+async function saveProjectWithAudio(
+  tracks: Track[],
+  serialized: SerializedProject,
+  folderHandle: FileSystemDirectoryHandle,
+): Promise<ProjectFileStructure> {
+  const audioDirHandle = await folderHandle.getDirectoryHandle('audio', { create: true });
+
+  const clipsById = new Map<string, Track['clips'][number]>();
+  for (const track of tracks) {
+    for (const clip of track.clips) clipsById.set(clip.id, clip);
+  }
+
+  for (const track of serialized.tracks) {
+    for (const clip of track.clips) {
+      const runtimeClip = clipsById.get(clip.id);
+      if (!runtimeClip?.audioBufferId) continue;
+      const buffer = engine.getBuffer(runtimeClip.audioBufferId);
+      if (!buffer) continue;
+      try {
+        clip.audioFile = await saveAudioToProject(audioDirHandle, buffer, clip.id, clip.name);
+      } catch (e) {
+        console.error(`Failed to save audio for clip ${clip.id}:`, e);
+      }
     }
   }
+
+  return saveProjectToFileSystem(serialized, folderHandle);
 }
 
 // Helper to load audio files for clips
