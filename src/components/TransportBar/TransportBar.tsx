@@ -67,6 +67,38 @@ export default function TransportBar() {
   };
 
   useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const mod = e.ctrlKey || e.metaKey;
+      if (mod && e.key.toLowerCase() === 'n') {
+        e.preventDefault();
+        setShowProjectDialog('new');
+        return;
+      }
+      if (mod && e.key.toLowerCase() === 'o') {
+        e.preventDefault();
+        setShowProjectDialog('load');
+        return;
+      }
+      if (mod && e.key.toLowerCase() === 's') {
+        e.preventDefault();
+        setShowProjectDialog('save');
+        return;
+      }
+      if (e.code === 'Space') {
+        const target = e.target as HTMLElement | null;
+        const isTyping =
+          !!target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable);
+        if (isTyping) return;
+        e.preventDefault();
+        handlePlayPause();
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [handlePlayPause]);
+
+  useEffect(() => {
     if (!isPlaying) {
       if (rafRef.current !== null) {
         cancelAnimationFrame(rafRef.current);
@@ -165,6 +197,7 @@ export default function TransportBar() {
           className={styles.btn + ' ' + (isPlaying ? styles.active : '')}
           onClick={handlePlayPause}
           aria-label={isPlaying ? 'Pause' : 'Play'}
+          title={isPlaying ? 'Pause (Space)' : 'Play (Space)'}
         >
           {isPlaying ? '⏸' : '▶'}
         </button>

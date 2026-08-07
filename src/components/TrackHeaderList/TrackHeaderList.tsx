@@ -11,6 +11,12 @@ interface Props {
   onScroll: (e: React.UIEvent<HTMLDivElement>) => void;
 }
 
+function formatPan(pan: number): string {
+  const pct = Math.round(Math.abs(pan) * 100);
+  if (pct === 0) return 'C';
+  return pan < 0 ? `${pct}L` : `${pct}R`;
+}
+
 export default function TrackHeaderList({ scrollRef, onScroll }: Props) {
   const { tracks, updateTrack, removeTrack } = useTrackStore();
   const createTracksForClips = useTrackStore((s) => s.createTracksForClips);
@@ -105,6 +111,20 @@ export default function TrackHeaderList({ scrollRef, onScroll }: Props) {
               className={styles.volume}
               aria-label={`Volume for ${track.name}`}
             />
+            <div className={styles.panRow}>
+              <input
+                type="range"
+                min={-1}
+                max={1}
+                step={0.01}
+                value={track.pan}
+                onChange={(e) => updateTrack(track.id, { pan: Number(e.target.value) })}
+                title={`Pan: ${formatPan(track.pan)}`}
+                className={styles.pan}
+                aria-label={`Pan for ${track.name}`}
+              />
+              <span className={styles.panValue}>{formatPan(track.pan)}</span>
+            </div>
           </div>
         ))}
         {tracks.length === 0 && (
