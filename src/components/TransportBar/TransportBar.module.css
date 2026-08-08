@@ -92,3 +92,53 @@
 .projectBtn:hover {
   background: #6b778c;
 }
+
+.recording {
+  background: var(--danger);
+  border-color: var(--danger);
+  color: #fff;
+}
+
+.recording:hover {
+  background: var(--danger);
+  filter: brightness(1.1);
+}
+
+.countingIn {
+  background: var(--danger);
+  border-color: var(--danger);
+  color: #fff;
+  opacity: 0.7;
+}
+
+.deviceSelect {
+  height: 28px;
+  max-width: 140px;
+  font-size: 12px;
+}
+
+.countInLabel {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  color: var(--text-dim);
+  white-space: nowrap;
+}
+
+.countInBarsInput {
+  width: 36px;
+  height: 28px;
+  text-align: center;
+  font-family: 'Courier New', monospace;
+  font-size: 12px;
+}
+
+.countInBarsInput::-webkit-inner-spin-button,
+.countInBarsInput::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+}
+.countInBarsInput[type='number'] {
+  -moz-appearance: textfield;
+  appearance: textfield;
+}

@@ -78,6 +78,14 @@ export default function TrackHeaderList({ scrollRef, onScroll }: Props) {
               </span>
               <div className={styles.controls}>
                 <button
+                  className={`${styles.iconBtn} ${track.armed ? styles.armed : ''}`}
+                  onClick={() => updateTrack(track.id, { armed: !track.armed })}
+                  title="Arm for recording"
+                  aria-label={`${track.armed ? 'Disarm' : 'Arm'} ${track.name} for recording`}
+                >
+                  ⏺
+                </button>
+                <button
                   className={`${styles.iconBtn} ${track.muted ? styles.toggled : ''}`}
                   onClick={() => updateTrack(track.id, { muted: !track.muted })}
                   title="Mute"

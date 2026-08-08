@@ -98,6 +98,17 @@
   filter: brightness(1.1);
 }
 
+.armed {
+  background: var(--danger);
+  border-color: var(--danger);
+  color: #fff;
+}
+
+.armed:hover {
+  background: var(--danger);
+  filter: brightness(1.1);
+}
+
 .removeBtn {
   width: 20px;
   height: 20px;

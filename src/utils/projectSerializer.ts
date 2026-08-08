@@ -116,6 +116,7 @@ export function convertToTracks(serializedTracks: SerializedTrack[]): Track[] {
     name: track.name,
     muted: track.muted,
     soloed: track.soloed,
+    armed: false,
     volume: track.volume,
     pan: track.pan,
     color: track.color,

@@ -14,6 +14,7 @@ export interface Track {
   name: string;
   muted: boolean;
   soloed: boolean;
+  armed: boolean;
   volume: number; // 0–1
   pan: number;    // -1 to 1
   color: string;

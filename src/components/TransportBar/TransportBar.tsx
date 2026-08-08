@@ -3,7 +3,9 @@ import styles from './TransportBar.module.css';
 import { useTransportStore } from '../../store/transportStore';
 import { useTrackStore } from '../../store/trackStore';
 import { useProjectStore } from '../../store/projectStore';
+import { useRecordingStore } from '../../store/recordingStore';
 import * as engine from '../../audio/engine';
+import * as recording from '../../audio/recording';
 import ExportDialog from '../ExportDialog/ExportDialog';
 import ProjectDialog from '../ProjectDialog/ProjectDialog';
 import type { Project } from '../../types/daw';
@@ -15,10 +17,28 @@ export default function TransportBar() {
   const tracks = useTrackStore((s) => s.tracks);
   const setTracks = useTrackStore((s) => s.setTracks);
   const addTrack = useTrackStore((s) => s.addTrack);
+  const addClip = useTrackStore((s) => s.addClip);
   const clearTracks = useTrackStore((s) => s.clearTracks);
-  
+
   const projectStore = useProjectStore();
-  
+
+  const {
+    inputDevices,
+    selectedDeviceId,
+    permissionGranted,
+    isRecording,
+    isCountingIn,
+    countInEnabled,
+    countInBars,
+    setInputDevices,
+    setSelectedDeviceId,
+    setPermissionGranted,
+    setIsRecording,
+    setIsCountingIn,
+    toggleCountIn,
+    setCountInBars,
+  } = useRecordingStore();
+
   const [showExportDialog, setShowExportDialog] = useState(false);
   const [showProjectDialog, setShowProjectDialog] = useState<false | 'save' | 'load' | 'new' | 'open'>(false);
 
@@ -28,6 +48,7 @@ export default function TransportBar() {
   const bpmRef = useRef(bpm);
   bpmRef.current = bpm;
   const lastBpmRef = useRef(bpm);
+  const recordStartBeatRef = useRef(0);
 
   const handlePlayPause = () => {
     if (isPlaying) {
@@ -52,8 +73,83 @@ export default function TransportBar() {
 
   const handleStop = () => {
     engine.stopAllSources();
+    recording.cancelCountIn();
+    setIsCountingIn(false);
+    if (isRecording) void finishRecording();
     stop();
   };
+
+  const finishRecording = async () => {
+    const buffer = await recording.stopRecording();
+    setIsRecording(false);
+    if (!buffer) return;
+
+    const durationBeats = (buffer.duration * bpmRef.current) / 60;
+    const bufferId = `buf-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    engine.storeBuffer(bufferId, buffer);
+    for (const track of useTrackStore.getState().tracks) {
+      if (track.armed) {
+        addClip(track.id, recordStartBeatRef.current, durationBeats, 'Recording', bufferId);
+      }
+    }
+  };
+
+  const armedTracks = tracks.filter((t) => t.armed);
+  const canRecord = armedTracks.length > 0 && !!selectedDeviceId;
+
+  const handleRecordToggle = () => {
+    if (isRecording) {
+      void finishRecording();
+      return;
+    }
+    if (!canRecord) return;
+
+    const beginRecording = async () => {
+      await engine.resumeContext();
+      if (countInEnabled) {
+        setIsCountingIn(true);
+        const completed = await recording.scheduleCountIn(countInBars, bpmRef.current);
+        setIsCountingIn(false);
+        if (!completed) return;
+      }
+      recordStartBeatRef.current = useTransportStore.getState().playheadBeats;
+      if (!useTransportStore.getState().isPlaying) {
+        handlePlayPause();
+      }
+      await recording.startRecording(selectedDeviceId);
+      setIsRecording(true);
+    };
+    void beginRecording();
+  };
+
+  const handleRequestMicPermission = () => {
+    if (permissionGranted) return;
+    const grantPermission = async () => {
+      try {
+        await recording.requestMicPermission();
+        setPermissionGranted(true);
+        setInputDevices(await recording.listInputDevices());
+      } catch (e) {
+        console.warn('Microphone permission was not granted:', e);
+      }
+    };
+    void grantPermission();
+  };
+
+  useEffect(() => {
+    let cancelled = false;
+    const refreshDevices = () => {
+      recording.listInputDevices().then((devices) => {
+        if (!cancelled) setInputDevices(devices);
+      });
+    };
+    refreshDevices();
+    navigator.mediaDevices?.addEventListener('devicechange', refreshDevices);
+    return () => {
+      cancelled = true;
+      navigator.mediaDevices?.removeEventListener('devicechange', refreshDevices);
+    };
+  }, [setInputDevices]);
 
   const handleExport = () => {
     setShowExportDialog(true);
@@ -217,9 +313,57 @@ export default function TransportBar() {
         >
           ↻
         </button>
-        <button className={styles.btn} aria-label="Record" title="Record (not yet implemented)">
-          ⏺
+        <button
+          className={styles.btn + ' ' + (isRecording ? styles.recording : isCountingIn ? styles.countingIn : '')}
+          onClick={handleRecordToggle}
+          disabled={isCountingIn || (!isRecording && !canRecord)}
+          aria-label={isRecording ? 'Stop Recording' : 'Record'}
+          title={
+            isRecording
+              ? 'Stop Recording'
+              : isCountingIn
+                ? 'Counting in…'
+                : canRecord
+                  ? 'Record'
+                  : armedTracks.length === 0
+                    ? 'Arm a track to record'
+                    : 'Select an input device to record'
+          }
+        >
+          {isCountingIn ? '⏳' : '⏺'}
         </button>
+
+        <select
+          className={styles.deviceSelect}
+          value={selectedDeviceId ?? ''}
+          onFocus={handleRequestMicPermission}
+          onChange={(e) => setSelectedDeviceId(e.target.value || null)}
+          aria-label="Recording input device"
+          title="Recording input device"
+        >
+          {inputDevices.length === 0 && <option value="">No input devices</option>}
+          {inputDevices.map((device, i) => (
+            <option key={device.deviceId} value={device.deviceId}>
+              {device.label || `Microphone ${i + 1}`}
+            </option>
+          ))}
+        </select>
+
+        <label className={styles.countInLabel} title="Play a count-in before recording starts">
+          <input type="checkbox" checked={countInEnabled} onChange={toggleCountIn} />
+          Count-in
+        </label>
+        <input
+          type="number"
+          className={styles.countInBarsInput}
+          min={1}
+          max={8}
+          value={countInBars}
+          disabled={!countInEnabled}
+          onChange={(e) => setCountInBars(Number(e.target.value))}
+          title="Count-in length in bars"
+          aria-label="Count-in bars"
+        />
 
         <span className={styles.position} aria-label="Position">
           {bar}:{beat}
