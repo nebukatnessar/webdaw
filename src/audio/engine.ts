@@ -11,17 +11,50 @@ const activeSources: AudioBufferSourceNode[] = [];
 // whole mix (matching a DAW's master fader) instead of each track going
 // straight to destination.
 let masterGainNode: GainNode | null = null;
+let masterAnalyserL: AnalyserNode | null = null;
+let masterAnalyserR: AnalyserNode | null = null;
 
 function getMasterGainNode(ctx: AudioContext): GainNode {
   if (!masterGainNode) {
     masterGainNode = ctx.createGain();
     masterGainNode.connect(ctx.destination);
+
+    // Tap the post-fader signal for the L/R VU meters, split into
+    // per-channel analysers. This runs alongside the destination
+    // connection, not in place of it.
+    const splitter = ctx.createChannelSplitter(2);
+    masterAnalyserL = ctx.createAnalyser();
+    masterAnalyserR = ctx.createAnalyser();
+    masterAnalyserL.fftSize = 512;
+    masterAnalyserR.fftSize = 512;
+    masterGainNode.connect(splitter);
+    splitter.connect(masterAnalyserL, 0);
+    splitter.connect(masterAnalyserR, 1);
   }
   return masterGainNode;
 }
 
 export function setMasterVolume(volume: number): void {
   getMasterGainNode(getAudioContext()).gain.value = volume;
+}
+
+/**
+ * Instantaneous RMS level (0-1) of the master bus, per channel - meant to
+ * be polled on a rAF loop to drive a VU meter. Returns zeros until the
+ * master node has been created (e.g. before anything has ever played).
+ */
+export function getMasterLevels(): { left: number; right: number } {
+  if (!masterAnalyserL || !masterAnalyserR) return { left: 0, right: 0 };
+
+  const rms = (analyser: AnalyserNode): number => {
+    const data = new Float32Array(analyser.fftSize);
+    analyser.getFloatTimeDomainData(data);
+    let sum = 0;
+    for (let i = 0; i < data.length; i++) sum += data[i] * data[i];
+    return Math.sqrt(sum / data.length);
+  };
+
+  return { left: rms(masterAnalyserL), right: rms(masterAnalyserR) };
 }
 
 // One persistent gain+pan node per track, reused across the whole session
