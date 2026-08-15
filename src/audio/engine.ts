@@ -1,9 +1,58 @@
 import type { Track } from '../types/daw';
 import { cacheBuffer } from './bufferCache';
+import { useTrackStore } from '../store/trackStore';
 
 let audioCtx: AudioContext | null = null;
 const bufferMap = new Map<string, AudioBuffer>();
 const activeSources: AudioBufferSourceNode[] = [];
+
+// One persistent gain+pan node per track, reused across the whole session
+// instead of being recreated (and re-snapshotted) every time playback
+// starts. This is what lets volume/pan/mute/solo changes take effect live,
+// on whatever is currently playing, rather than only on the next Play.
+const trackNodes = new Map<string, { gainNode: GainNode; panner: StereoPannerNode }>();
+
+function getOrCreateTrackNodes(ctx: AudioContext, trackId: string) {
+  let nodes = trackNodes.get(trackId);
+  if (!nodes) {
+    const gainNode = ctx.createGain();
+    const panner = ctx.createStereoPanner();
+    gainNode.connect(panner);
+    panner.connect(ctx.destination);
+    nodes = { gainNode, panner };
+    trackNodes.set(trackId, nodes);
+  }
+  return nodes;
+}
+
+/**
+ * Applies each track's volume/pan/mute/solo to its persistent audio node,
+ * live - this runs on every track change (not just at playback start), so
+ * dragging a slider or toggling mute/solo while something is already
+ * playing takes effect immediately. Solo silences every non-soloed track.
+ */
+export function updateLiveTrackParams(tracks: Track[]): void {
+  const ctx = getAudioContext();
+
+  const currentIds = new Set(tracks.map((t) => t.id));
+  for (const [id, nodes] of trackNodes) {
+    if (!currentIds.has(id)) {
+      nodes.gainNode.disconnect();
+      nodes.panner.disconnect();
+      trackNodes.delete(id);
+    }
+  }
+
+  const hasSoloed = tracks.some((t) => t.soloed);
+  for (const track of tracks) {
+    const { gainNode, panner } = getOrCreateTrackNodes(ctx, track.id);
+    const audible = hasSoloed ? track.soloed : !track.muted;
+    gainNode.gain.value = audible ? track.volume : 0;
+    panner.pan.value = track.pan;
+  }
+}
+
+useTrackStore.subscribe((state) => updateLiveTrackParams(state.tracks));
 
 export function getAudioContext(): AudioContext {
   if (!audioCtx) audioCtx = new AudioContext();
@@ -53,17 +102,15 @@ export function schedulePlayback(
   const ctx = getAudioContext();
   const now = ctx.currentTime;
   const beatsToSecs = 60 / bpm;
-  const hasSoloed = tracks.some((t) => t.soloed);
+
+  // Make sure every track has an up-to-date persistent node before
+  // scheduling - audibility (mute/solo) is enforced by that node's live
+  // gain value, not by skipping scheduling, so toggling mute/solo later
+  // affects sources that are already playing.
+  updateLiveTrackParams(tracks);
 
   for (const track of tracks) {
-    if (hasSoloed ? !track.soloed : track.muted) continue;
-
-    const gainNode = ctx.createGain();
-    gainNode.gain.value = track.volume;
-    const panner = ctx.createStereoPanner();
-    panner.pan.value = track.pan;
-    gainNode.connect(panner);
-    panner.connect(ctx.destination);
+    const { gainNode } = getOrCreateTrackNodes(ctx, track.id);
 
     for (const clip of track.clips) {
       if (!clip.audioBufferId) continue;
