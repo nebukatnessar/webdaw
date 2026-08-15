@@ -1,4 +1,5 @@
 import type { Track } from '../types/daw';
+import { cacheBuffer } from './bufferCache';
 
 let audioCtx: AudioContext | null = null;
 const bufferMap = new Map<string, AudioBuffer>();
@@ -16,6 +17,9 @@ export async function resumeContext(): Promise<void> {
 
 export function storeBuffer(id: string, buffer: AudioBuffer): void {
   bufferMap.set(id, buffer);
+  // Durably cache it so it survives a page refresh even without re-picking
+  // a folder (see restoreLastOpenedProject in projectStore.ts).
+  void cacheBuffer(id, buffer);
 }
 
 export function getBuffer(id: string): AudioBuffer | undefined {

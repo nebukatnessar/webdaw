@@ -19,6 +19,7 @@ import {
   loadAudioFromProject,
 } from '../utils/projectSerializer';
 import * as engine from '../audio/engine';
+import * as bufferCache from '../audio/bufferCache';
 // Import stores to access their state outside React components
 import { useTrackStore as trackStore } from './trackStore';
 import { useTransportStore as transportStore } from './transportStore';
@@ -97,7 +98,8 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
         try {
           const serialized = JSON.parse(autoSaveData) as SerializedProject;
           const tracks = convertToTracks(serialized.tracks);
-          
+          await hydrateAudioFromCache(tracks);
+
           // Update the track store with restored tracks
           trackStore.getState().setTracks(tracks);
           
@@ -179,6 +181,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
           try {
             const serialized = JSON.parse(autoSaveData) as SerializedProject;
             const tracks = convertToTracks(serialized.tracks);
+            await hydrateAudioFromCache(tracks);
             trackStore.getState().setTracks(tracks);
             transportStore.getState().setTransportState(serialized.transport);
             set({ currentProjectName: serialized.name });
@@ -416,8 +419,9 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
       updatedAt: now,
     });
     
-    // Clear audio buffer map
+    // Clear audio buffer map and its durable cache
     engine.clearAllBuffers();
+    void bufferCache.clearBufferCache();
   },
 
   deleteProject: (id) => {
@@ -520,6 +524,26 @@ async function saveProjectWithAudio(
   }
 
   return saveProjectToFileSystem(serialized, folderHandle);
+}
+
+// Re-populate the engine buffer map from the durable IndexedDB cache for
+// clips restored from the localStorage auto-save snapshot (no folder handle
+// available in that path, so this is the only way to get audio back after a
+// refresh). Clears audioBufferId for anything that didn't survive in cache
+// so playback correctly skips it instead of looking up a buffer that will
+// never exist.
+async function hydrateAudioFromCache(tracks: Track[]): Promise<void> {
+  for (const track of tracks) {
+    for (const clip of track.clips) {
+      if (!clip.audioBufferId) continue;
+      const buffer = await bufferCache.getCachedBuffer(clip.audioBufferId);
+      if (buffer) {
+        engine.storeBuffer(clip.audioBufferId, buffer);
+      } else {
+        clip.audioBufferId = undefined;
+      }
+    }
+  }
 }
 
 // Helper to load audio files for clips

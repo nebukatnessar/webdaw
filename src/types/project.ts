@@ -47,6 +47,11 @@ export interface SerializedClip {
   name: string;
   color: string;
   audioFile: string | null; // Relative path to audio file, e.g., "audio/clip1.wav"
+  // Session-scoped id into the in-memory audio buffer cache. Only meaningful
+  // for the localStorage auto-save round-trip (restoring across a refresh
+  // without re-picking a folder) - loading from a real project folder always
+  // re-derives this from audioFile instead.
+  audioBufferId?: string;
 }
 
 // Project file structure info

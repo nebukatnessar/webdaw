@@ -1,4 +1,5 @@
 import { getBuffer, storeBuffer, decodeFile } from '../audio/engine';
+import { encodeWav } from '../audio/wav';
 import type { Track, Clip } from '../types/daw';
 import type {
   Project,
@@ -102,6 +103,7 @@ export function createProjectFromState(
         name: clip.name,
         color: clip.color,
         audioFile: clip.audioFile ?? null,
+        audioBufferId: clip.audioBufferId,
       })),
     })),
   };
@@ -127,7 +129,9 @@ export function convertToTracks(serializedTracks: SerializedTrack[]): Track[] {
       durationBeats: clip.durationBeats,
       name: clip.name,
       color: clip.color,
-      audioBufferId: undefined, // Will be set when loaded
+      // Carried through for the localStorage auto-save round-trip; loading
+      // from a real project folder overwrites this via loadAllAudioFiles.
+      audioBufferId: clip.audioBufferId,
       audioFile: clip.audioFile,
     })),
   }));
@@ -191,10 +195,9 @@ export async function saveAudioToProject(
 ): Promise<string> {
   const fileName = `${clipId}.wav`;
   const fileHandle = await audioDirHandle.getFileHandle(fileName, { create: true });
-  
-  // Convert AudioBuffer to WAV blob
-  const wavBlob = await renderBufferAsWAV(buffer);
-  
+
+  const wavBlob = encodeWav(buffer);
+
   const writeStream = await fileHandle.createWritable();
   await writeStream.write(wavBlob);
   await writeStream.close();
@@ -221,58 +224,6 @@ export async function loadAudioFromProject(
   
   // Decode the WAV file
   return decodeFile(file);
-}
-
-/**
- * Render AudioBuffer as WAV blob
- */
-function renderBufferAsWAV(buffer: AudioBuffer): Promise<Blob> {
-  return new Promise((resolve) => {
-    const numChannels = buffer.numberOfChannels;
-    const sampleRate = buffer.sampleRate;
-    const bytesPerSample = 2;
-    const blockAlign = numChannels * bytesPerSample;
-    const byteRate = sampleRate * blockAlign;
-    const dataSize = buffer.length * numChannels * bytesPerSample;
-    
-    const bufferLength = 44 + dataSize;
-    const arrayBuffer = new ArrayBuffer(bufferLength);
-    const view = new DataView(arrayBuffer);
-    
-    // Write WAV header
-    writeString(view, 0, 'RIFF');
-    view.setUint32(4, 36 + dataSize, true);
-    writeString(view, 8, 'WAVE');
-    writeString(view, 12, 'fmt ');
-    view.setUint32(16, 16, true);
-    view.setUint16(20, 1, true);
-    view.setUint16(22, numChannels, true);
-    view.setUint32(24, sampleRate, true);
-    view.setUint32(28, byteRate, true);
-    view.setUint16(32, blockAlign, true);
-    view.setUint16(34, bytesPerSample * 8, true);
-    writeString(view, 36, 'data');
-    view.setUint32(40, dataSize, true);
-    
-    // Write audio data
-    const offset = 44;
-    for (let i = 0; i < buffer.numberOfChannels; i++) {
-      const channelData = buffer.getChannelData(i);
-      for (let j = 0; j < channelData.length; j++) {
-        const sample = Math.max(-1, Math.min(1, channelData[j]));
-        const intSample = sample < 0 ? sample * 32768 : sample * 32767;
-        view.setInt16(offset + j * blockAlign + i * bytesPerSample, intSample, true);
-      }
-    }
-    
-    resolve(new Blob([arrayBuffer], { type: 'audio/wav' }));
-  });
-}
-
-function writeString(view: DataView, offset: number, string: string): void {
-  for (let i = 0; i < string.length; i++) {
-    view.setUint8(offset + i, string.charCodeAt(i));
-  }
 }
 
 /**
