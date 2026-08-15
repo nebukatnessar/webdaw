@@ -5,6 +5,7 @@ import { useTrackStore } from '../../store/trackStore';
 import { useTransportStore } from '../../store/transportStore';
 import * as engine from '../../audio/engine';
 import { BEATS_PER_BAR } from '../../constants';
+import TrackMeter from './TrackMeter';
 
 interface Props {
   scrollRef: RefObject<HTMLDivElement | null>;
@@ -71,68 +72,71 @@ export default function TrackHeaderList({ scrollRef, onScroll }: Props) {
       <div className={styles.scroll} ref={scrollRef} onScroll={onScroll}>
         {tracks.map((track) => (
           <div key={track.id} className={styles.row}>
-            <div className={styles.rowTop}>
-              <span className={styles.colorSwatch} style={{ background: track.color }} />
-              <span className={styles.name} title={track.name}>
-                {track.name}
-              </span>
-              <div className={styles.controls}>
-                <button
-                  className={`${styles.iconBtn} ${track.armed ? styles.armed : ''}`}
-                  onClick={() => updateTrack(track.id, { armed: !track.armed })}
-                  title="Arm for recording"
-                  aria-label={`${track.armed ? 'Disarm' : 'Arm'} ${track.name} for recording`}
-                >
-                  ⏺
-                </button>
-                <button
-                  className={`${styles.iconBtn} ${track.muted ? styles.toggled : ''}`}
-                  onClick={() => updateTrack(track.id, { muted: !track.muted })}
-                  title="Mute"
-                >
-                  M
-                </button>
-                <button
-                  className={`${styles.iconBtn} ${track.soloed ? styles.toggled : ''}`}
-                  onClick={() => updateTrack(track.id, { soloed: !track.soloed })}
-                  title="Solo"
-                >
-                  S
-                </button>
-                <button
-                  className={styles.removeBtn}
-                  onClick={() => removeTrack(track.id)}
-                  title="Remove track"
-                >
-                  ✕
-                </button>
+            <div className={styles.rowMain}>
+              <div className={styles.rowTop}>
+                <span className={styles.colorSwatch} style={{ background: track.color }} />
+                <span className={styles.name} title={track.name}>
+                  {track.name}
+                </span>
+                <div className={styles.controls}>
+                  <button
+                    className={`${styles.iconBtn} ${track.armed ? styles.armed : ''}`}
+                    onClick={() => updateTrack(track.id, { armed: !track.armed })}
+                    title="Arm for recording"
+                    aria-label={`${track.armed ? 'Disarm' : 'Arm'} ${track.name} for recording`}
+                  >
+                    ⏺
+                  </button>
+                  <button
+                    className={`${styles.iconBtn} ${track.muted ? styles.toggled : ''}`}
+                    onClick={() => updateTrack(track.id, { muted: !track.muted })}
+                    title="Mute"
+                  >
+                    M
+                  </button>
+                  <button
+                    className={`${styles.iconBtn} ${track.soloed ? styles.toggled : ''}`}
+                    onClick={() => updateTrack(track.id, { soloed: !track.soloed })}
+                    title="Solo"
+                  >
+                    S
+                  </button>
+                  <button
+                    className={styles.removeBtn}
+                    onClick={() => removeTrack(track.id)}
+                    title="Remove track"
+                  >
+                    ✕
+                  </button>
+                </div>
               </div>
-            </div>
-            <input
-              type="range"
-              min={0}
-              max={1}
-              step={0.01}
-              value={track.volume}
-              onChange={(e) => updateTrack(track.id, { volume: Number(e.target.value) })}
-              title={`Volume: ${Math.round(track.volume * 100)}%`}
-              className={styles.volume}
-              aria-label={`Volume for ${track.name}`}
-            />
-            <div className={styles.panRow}>
               <input
                 type="range"
-                min={-1}
+                min={0}
                 max={1}
                 step={0.01}
-                value={track.pan}
-                onChange={(e) => updateTrack(track.id, { pan: Number(e.target.value) })}
-                title={`Pan: ${formatPan(track.pan)}`}
-                className={styles.pan}
-                aria-label={`Pan for ${track.name}`}
+                value={track.volume}
+                onChange={(e) => updateTrack(track.id, { volume: Number(e.target.value) })}
+                title={`Volume: ${Math.round(track.volume * 100)}%`}
+                className={styles.volume}
+                aria-label={`Volume for ${track.name}`}
               />
-              <span className={styles.panValue}>{formatPan(track.pan)}</span>
+              <div className={styles.panRow}>
+                <input
+                  type="range"
+                  min={-1}
+                  max={1}
+                  step={0.01}
+                  value={track.pan}
+                  onChange={(e) => updateTrack(track.id, { pan: Number(e.target.value) })}
+                  title={`Pan: ${formatPan(track.pan)}`}
+                  className={styles.pan}
+                  aria-label={`Pan for ${track.name}`}
+                />
+                <span className={styles.panValue}>{formatPan(track.pan)}</span>
+              </div>
             </div>
+            <TrackMeter trackId={track.id} trackName={track.name} />
           </div>
         ))}
         {tracks.length === 0 && (

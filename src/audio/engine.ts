@@ -1,6 +1,7 @@
 import type { Track } from '../types/daw';
 import { cacheBuffer } from './bufferCache';
 import { useTrackStore } from '../store/trackStore';
+import { rmsFromAnalyser } from './meterUtils';
 
 let audioCtx: AudioContext | null = null;
 const bufferMap = new Map<string, AudioBuffer>();
@@ -45,16 +46,7 @@ export function setMasterVolume(volume: number): void {
  */
 export function getMasterLevels(): { left: number; right: number } {
   if (!masterAnalyserL || !masterAnalyserR) return { left: 0, right: 0 };
-
-  const rms = (analyser: AnalyserNode): number => {
-    const data = new Float32Array(analyser.fftSize);
-    analyser.getFloatTimeDomainData(data);
-    let sum = 0;
-    for (let i = 0; i < data.length; i++) sum += data[i] * data[i];
-    return Math.sqrt(sum / data.length);
-  };
-
-  return { left: rms(masterAnalyserL), right: rms(masterAnalyserR) };
+  return { left: rmsFromAnalyser(masterAnalyserL), right: rmsFromAnalyser(masterAnalyserR) };
 }
 
 // One persistent gain+pan node per track, reused across the whole session
@@ -63,6 +55,12 @@ export function getMasterLevels(): { left: number; right: number } {
 // on whatever is currently playing, rather than only on the next Play.
 const trackNodes = new Map<string, { gainNode: GainNode; panner: StereoPannerNode }>();
 
+// Per-track analyser tapping each track's post-fader, post-pan signal (the
+// same point its audio reaches the master bus), for a per-track VU meter in
+// the track header list - separate from the trackNodes map since it's purely
+// a metering tap, not part of the audio path itself.
+const trackAnalysers = new Map<string, AnalyserNode>();
+
 function getOrCreateTrackNodes(ctx: AudioContext, trackId: string) {
   let nodes = trackNodes.get(trackId);
   if (!nodes) {
@@ -70,10 +68,27 @@ function getOrCreateTrackNodes(ctx: AudioContext, trackId: string) {
     const panner = ctx.createStereoPanner();
     gainNode.connect(panner);
     panner.connect(getMasterGainNode(ctx));
+
+    const analyser = ctx.createAnalyser();
+    analyser.fftSize = 512;
+    panner.connect(analyser);
+    trackAnalysers.set(trackId, analyser);
+
     nodes = { gainNode, panner };
     trackNodes.set(trackId, nodes);
   }
   return nodes;
+}
+
+/**
+ * Instantaneous RMS level (0-1) of a track's post-fader signal - meant to be
+ * polled on a rAF loop to drive that track's VU meter. Returns 0 until the
+ * track's nodes have been created (e.g. before it's ever been part of a
+ * schedulePlayback/updateLiveTrackParams call).
+ */
+export function getTrackLevel(trackId: string): number {
+  const analyser = trackAnalysers.get(trackId);
+  return analyser ? rmsFromAnalyser(analyser) : 0;
 }
 
 /**
@@ -91,6 +106,8 @@ export function updateLiveTrackParams(tracks: Track[]): void {
       nodes.gainNode.disconnect();
       nodes.panner.disconnect();
       trackNodes.delete(id);
+      trackAnalysers.get(id)?.disconnect();
+      trackAnalysers.delete(id);
     }
   }
 

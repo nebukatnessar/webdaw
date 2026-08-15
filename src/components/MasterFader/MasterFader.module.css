@@ -30,32 +30,6 @@
   width: 100%;
 }
 
-.meterTrack {
-  position: relative;
-  width: 8px;
-  border-radius: 2px;
-  overflow: hidden;
-  background: linear-gradient(
-    to top,
-    #4caf50 0%,
-    #4caf50 70%,
-    #ffeb3b 70%,
-    #ffeb3b 88%,
-    #f44336 88%,
-    #f44336 100%
-  );
-}
-
-.meterMask {
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  height: 100%;
-  background: var(--bg-2);
-  transition: height 60ms linear;
-}
-
 .sliderTrack {
   flex: 1;
   display: flex;

@@ -2,15 +2,8 @@ import { useEffect, useRef } from 'react';
 import styles from './MasterFader.module.css';
 import { useTransportStore } from '../../store/transportStore';
 import * as engine from '../../audio/engine';
-
-const METER_FLOOR_DB = -50;
-
-function levelToPercent(rms: number): number {
-  if (rms <= 0) return 0;
-  const db = 20 * Math.log10(rms);
-  const clamped = Math.max(METER_FLOOR_DB, Math.min(0, db));
-  return ((clamped - METER_FLOOR_DB) / -METER_FLOOR_DB) * 100;
-}
+import { levelToPercent } from '../../audio/meterUtils';
+import VuMeterBar from '../VuMeterBar/VuMeterBar';
 
 export default function MasterFader() {
   const masterVolume = useTransportStore((s) => s.masterVolume);
@@ -57,9 +50,7 @@ export default function MasterFader() {
     <div className={styles.wrapper}>
       <span className={styles.label}>Master</span>
       <div className={styles.faderRow}>
-        <div className={styles.meterTrack} title="Left channel level">
-          <div className={styles.meterMask} ref={leftMaskRef} />
-        </div>
+        <VuMeterBar ref={leftMaskRef} title="Left channel level" />
         <div className={styles.sliderTrack}>
           <input
             type="range"
@@ -73,9 +64,7 @@ export default function MasterFader() {
             title={`Master volume: ${Math.round(masterVolume * 100)}%`}
           />
         </div>
-        <div className={styles.meterTrack} title="Right channel level">
-          <div className={styles.meterMask} ref={rightMaskRef} />
-        </div>
+        <VuMeterBar ref={rightMaskRef} title="Right channel level" />
       </div>
       <span className={styles.value}>{Math.round(masterVolume * 100)}%</span>
     </div>

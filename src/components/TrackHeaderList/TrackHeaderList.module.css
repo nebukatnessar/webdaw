@@ -35,9 +35,8 @@
 
 .row {
   display: flex;
-  flex-direction: column;
-  justify-content: center;
-  gap: 6px;
+  align-items: stretch;
+  gap: 8px;
   height: var(--track-height);
   padding: 8px 8px;
   border-bottom: 1px solid var(--border);
@@ -46,6 +45,19 @@
 
 .row:nth-child(even) {
   background: var(--bg-2);
+}
+
+.rowMain {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 6px;
+  flex: 1;
+  min-width: 0;
+}
+
+.meterCol {
+  flex-shrink: 0;
 }
 
 .rowTop {
