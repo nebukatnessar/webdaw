@@ -12,10 +12,15 @@ function openDb(): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
     const request = indexedDB.open(DB_NAME, DB_VERSION);
     request.onupgradeneeded = () => {
-      request.result.createObjectStore(STORE_NAME);
+      if (!request.result.objectStoreNames.contains(STORE_NAME)) {
+        request.result.createObjectStore(STORE_NAME);
+      }
     };
     request.onsuccess = () => resolve(request.result);
     request.onerror = () => reject(request.error);
+    // Without this, a stuck connection from another tab/reload would leave
+    // this promise pending forever instead of failing loudly.
+    request.onblocked = () => reject(new Error(`IndexedDB open("${DB_NAME}") blocked by another connection`));
   });
 }
 

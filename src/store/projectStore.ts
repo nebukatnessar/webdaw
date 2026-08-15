@@ -103,11 +103,17 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
   getLastUsedDirectory: () => get().lastUsedDirectory,
 
   restoreLastOpenedProject: async () => {
+    console.log('[restore] starting');
     try {
       // Restore the last-used base directory regardless of whether we can
       // reconnect the active project, so "New Project" doesn't need the
       // base folder re-picked either.
-      const storedBaseDir = await handleStore.getHandle<FileSystemDirectoryHandle>(BASE_DIRECTORY_HANDLE_KEY);
+      const storedBaseDir = await withTimeout(
+        handleStore.getHandle<FileSystemDirectoryHandle>(BASE_DIRECTORY_HANDLE_KEY),
+        3000,
+        'reading stored base directory handle',
+      );
+      console.log('[restore] storedBaseDir:', storedBaseDir ? storedBaseDir.name : null);
       if (storedBaseDir) {
         set({ lastUsedDirectory: storedBaseDir });
       }
@@ -116,21 +122,32 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
       // persisted handle. queryPermission() needs no user gesture and shows
       // no UI - if still granted, this loads real audio from disk exactly
       // like a normal Open, no separate cache required.
-      const storedProjectDir = await handleStore.getHandle<FileSystemDirectoryHandle>(PROJECT_FOLDER_HANDLE_KEY);
+      const storedProjectDir = await withTimeout(
+        handleStore.getHandle<FileSystemDirectoryHandle>(PROJECT_FOLDER_HANDLE_KEY),
+        3000,
+        'reading stored project folder handle',
+      );
+      console.log('[restore] storedProjectDir:', storedProjectDir ? storedProjectDir.name : null);
       if (storedProjectDir) {
         try {
-          const permission = await (storedProjectDir as any).queryPermission({ mode: 'readwrite' });
+          const permission = await withTimeout(
+            (storedProjectDir as any).queryPermission({ mode: 'readwrite' }),
+            3000,
+            'queryPermission on stored project folder',
+          );
+          console.log('[restore] queryPermission result:', permission);
           if (permission === 'granted') {
             await get().loadProject(storedProjectDir);
-            console.log('Reconnected to last project folder:', storedProjectDir.name);
+            console.log('[restore] reconnected to last project folder:', storedProjectDir.name);
             return;
           }
           // Permission needs re-affirming, which requestPermission() can
           // only do in response to an actual user gesture - surface a
           // one-click reconnect instead of a folder re-pick.
           set({ pendingReconnect: { handle: storedProjectDir, projectName: storedProjectDir.name } });
+          console.log('[restore] permission not granted, showing reconnect banner');
         } catch (e) {
-          console.warn('Could not query permission for the stored project folder:', e);
+          console.warn('[restore] could not query permission for the stored project folder:', e);
         }
       }
 
@@ -140,6 +157,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
       // If a reconnect is pending, this is just an interim view; clicking
       // Reconnect replaces it with the authoritative on-disk data.
       const autoSaveData = localStorage.getItem(PROJECT_AUTO_SAVE_KEY);
+      console.log('[restore] localStorage auto-save present:', !!autoSaveData);
       if (autoSaveData) {
         try {
           const serialized = JSON.parse(autoSaveData) as SerializedProject;
@@ -160,15 +178,15 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
             currentProjectName: serialized.name,
           });
 
-          console.log('Restored project from auto-save:', serialized.name);
+          console.log('[restore] restored project from auto-save:', serialized.name);
         } catch (e) {
-          console.warn('Failed to restore from auto-save:', e);
+          console.warn('[restore] failed to restore from auto-save:', e);
         }
       } else {
-        console.log('No previous project to restore');
+        console.log('[restore] no previous project to restore');
       }
     } catch (e) {
-      console.error('Error restoring last opened project:', e);
+      console.error('[restore] error restoring last opened project:', e);
     }
   },
 
@@ -484,6 +502,18 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
     return { tracks, transport: serialized.transport };
   },
 }));
+
+// Bounds a promise that should normally resolve quickly, so a stuck
+// IndexedDB connection or permission query can't silently hang the whole
+// restore-on-refresh flow forever.
+function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
+  return Promise.race([
+    promise,
+    new Promise<T>((_, reject) =>
+      setTimeout(() => reject(new Error(`Timed out after ${ms}ms: ${label}`)), ms),
+    ),
+  ]);
+}
 
 // Save the project's audio buffers (keyed by clip, not by the whole global
 // buffer map) and link each saved file back onto the serialized clip before
