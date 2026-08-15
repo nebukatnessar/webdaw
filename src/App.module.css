@@ -10,3 +10,33 @@
   flex: 1;
   overflow: hidden;
 }
+
+.reconnectBanner {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 12px;
+  background: var(--accent);
+  color: #fff;
+  font-size: 12px;
+  flex-shrink: 0;
+}
+
+.reconnectBanner button {
+  height: 22px;
+  padding: 0 10px;
+  font-size: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.6);
+  background: transparent;
+  color: #fff;
+}
+
+.reconnectBanner button:hover {
+  background: rgba(255, 255, 255, 0.15);
+}
+
+.reconnectDismiss {
+  margin-left: auto;
+  border-color: transparent !important;
+  opacity: 0.85;
+}

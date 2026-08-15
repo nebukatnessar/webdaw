@@ -11,6 +11,7 @@ function App() {
   // Mutex flag to prevent infinite scroll-sync loops
   const syncingRef = useRef(false);
   const projectStore = useProjectStore();
+  const pendingReconnect = useProjectStore((s) => s.pendingReconnect);
   const [restoreAttempted, setRestoreAttempted] = useState(false);
 
   // Auto-restore last opened project on app startup (F5 refresh)
@@ -55,6 +56,17 @@ function App() {
 
   return (
     <div className={styles.app}>
+      {pendingReconnect && (
+        <div className={styles.reconnectBanner}>
+          <span>
+            Reconnect to &ldquo;{pendingReconnect.projectName}&rdquo; to restore its audio files
+          </span>
+          <button onClick={() => projectStore.reconnectProjectFolder()}>Reconnect</button>
+          <button onClick={() => projectStore.dismissReconnect()} className={styles.reconnectDismiss}>
+            Dismiss
+          </button>
+        </div>
+      )}
       <TransportBar />
       <div className={styles.workspace}>
         <TrackHeaderList scrollRef={headerRef} onScroll={onHeaderScroll} />

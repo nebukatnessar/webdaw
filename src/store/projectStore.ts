@@ -20,6 +20,7 @@ import {
 } from '../utils/projectSerializer';
 import * as engine from '../audio/engine';
 import * as bufferCache from '../audio/bufferCache';
+import * as handleStore from '../utils/handleStore';
 // Import stores to access their state outside React components
 import { useTrackStore as trackStore } from './trackStore';
 import { useTransportStore as transportStore } from './transportStore';
@@ -34,33 +35,44 @@ interface ProjectState {
   
   // Remember the last directory used for saving (for OPFS persistence)
   lastUsedDirectory: FileSystemDirectoryHandle | null;
-  
+
+  // Set when a persisted folder handle exists but its permission needs to be
+  // re-affirmed by the user (requestPermission requires a user gesture) -
+  // surfaced as a one-click "Reconnect" action instead of losing file-backed
+  // audio silently.
+  pendingReconnect: { handle: FileSystemDirectoryHandle; projectName: string } | null;
+
   // Actions
   setCurrentProject: (id: string | null, name: string) => void;
   setFileStructure: (structure: ProjectFileStructure | null) => void;
   setLastUsedDirectory: (directory: FileSystemDirectoryHandle | null) => void;
-  
+
   // Project management
   getProjects: () => ProjectMetadata[];
   saveCurrentProject: (tracks: Track[], transportState: ProjectTransportState, name?: string) => Promise<void>;
   loadProject: (folderHandle: FileSystemDirectoryHandle) => Promise<{ tracks: Track[]; transport: ProjectTransportState }>;
   newProject: (name?: string) => Promise<void>;
   deleteProject: (id: string) => void;
-  
+
   // Last used directory management
   getLastUsedDirectory: () => FileSystemDirectoryHandle | null;
-  
+
   // Auto-restore functionality
   restoreLastOpenedProject: () => Promise<void>;
-  
+  reconnectProjectFolder: () => Promise<void>;
+  dismissReconnect: () => void;
+
   // Export/Import
   exportProject: () => Promise<void>;
   importProject: (file: File) => Promise<{ tracks: Track[]; transport: ProjectTransportState }>;
 }
 
-// LocalStorage keys
-const LAST_OPENED_PROJECT_KEY = 'webdaw-last-opened-project';
+// LocalStorage key
 const PROJECT_AUTO_SAVE_KEY = 'webdaw-project-autosave';
+
+// IndexedDB handle-store keys (see src/utils/handleStore.ts)
+const PROJECT_FOLDER_HANDLE_KEY = 'currentProjectFolder';
+const BASE_DIRECTORY_HANDLE_KEY = 'lastUsedDirectory';
 
 let projectCounter = 0;
 
@@ -69,6 +81,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
   currentProjectName: 'Untitled Project',
   fileStructure: null,
   lastUsedDirectory: null,
+  pendingReconnect: null,
 
   setCurrentProject: (id, name) => {
     set({
@@ -90,9 +103,42 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
   getLastUsedDirectory: () => get().lastUsedDirectory,
 
   restoreLastOpenedProject: async () => {
-    
     try {
-      // First, try to restore from localStorage auto-save
+      // Restore the last-used base directory regardless of whether we can
+      // reconnect the active project, so "New Project" doesn't need the
+      // base folder re-picked either.
+      const storedBaseDir = await handleStore.getHandle<FileSystemDirectoryHandle>(BASE_DIRECTORY_HANDLE_KEY);
+      if (storedBaseDir) {
+        set({ lastUsedDirectory: storedBaseDir });
+      }
+
+      // Preferred path: reconnect to the real project folder via a
+      // persisted handle. queryPermission() needs no user gesture and shows
+      // no UI - if still granted, this loads real audio from disk exactly
+      // like a normal Open, no separate cache required.
+      const storedProjectDir = await handleStore.getHandle<FileSystemDirectoryHandle>(PROJECT_FOLDER_HANDLE_KEY);
+      if (storedProjectDir) {
+        try {
+          const permission = await (storedProjectDir as any).queryPermission({ mode: 'readwrite' });
+          if (permission === 'granted') {
+            await get().loadProject(storedProjectDir);
+            console.log('Reconnected to last project folder:', storedProjectDir.name);
+            return;
+          }
+          // Permission needs re-affirming, which requestPermission() can
+          // only do in response to an actual user gesture - surface a
+          // one-click reconnect instead of a folder re-pick.
+          set({ pendingReconnect: { handle: storedProjectDir, projectName: storedProjectDir.name } });
+        } catch (e) {
+          console.warn('Could not query permission for the stored project folder:', e);
+        }
+      }
+
+      // Fallback: restore structure (and its own cached audio) from the
+      // localStorage auto-save snapshot - covers browsers without File
+      // System Access support, and projects never given a real folder yet.
+      // If a reconnect is pending, this is just an interim view; clicking
+      // Reconnect replaces it with the authoritative on-disk data.
       const autoSaveData = localStorage.getItem(PROJECT_AUTO_SAVE_KEY);
       if (autoSaveData) {
         try {
@@ -100,10 +146,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
           const tracks = convertToTracks(serialized.tracks);
           await hydrateAudioFromCache(tracks);
 
-          // Update the track store with restored tracks
           trackStore.getState().setTracks(tracks);
-          
-          // Update transport state
           transportStore.getState().setTransportState({
             bpm: serialized.transport.bpm,
             playheadBeats: serialized.transport.playheadBeats,
@@ -112,90 +155,39 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
             selectionStart: serialized.transport.selectionStart,
             selectionEnd: serialized.transport.selectionEnd,
           });
-          
-          // Update project state
           set({
             currentProjectId: `restored-${Date.now()}`,
             currentProjectName: serialized.name,
           });
-          
-          console.log('Successfully restored project from auto-save:', serialized.name);
-          return;
-        } catch (e) {
-          console.warn('Failed to restore from auto-save, trying file system:', e);
-        }
-      }
-      
-      // If auto-save restore failed, try file system approach
-      // Check if File System Access API is available
-      if (typeof window === 'undefined' || !('showDirectoryPicker' in window)) {
-        console.log('File System Access API not available, cannot restore from file system');
-        return;
-      }
 
-      // Get last opened project info from localStorage
-      const lastProject = localStorage.getItem(LAST_OPENED_PROJECT_KEY);
-      
-      if (!lastProject) {
-        console.log('No last opened project found');
-        return;
-      }
-      
-      const { projectName } = JSON.parse(lastProject);
-      
-      try {
-        // Try to re-acquire the directory handle
-        // The browser SHOULD remember the permission if it was previously granted
-        // and should NOT show a permission dialog
-        const folderHandle = await (window as any).showDirectoryPicker({
-          mode: 'readwrite',
-          startIn: 'documents',
-        });
-        
-        // Now try to find and load the project
-        // Since we now use subfolders, try to find the project subfolder
-        try {
-          const projectFolderHandle = await folderHandle.getDirectoryHandle(projectName);
-          await get().loadProject(projectFolderHandle);
-          console.log('Successfully restored last opened project from file system');
-          return;
+          console.log('Restored project from auto-save:', serialized.name);
         } catch (e) {
-          // If project not found in subfolder, try the folder directly (legacy projects)
-          try {
-            await get().loadProject(folderHandle);
-            console.log('Successfully restored last opened project (legacy format)');
-            return;
-          } catch (e2) {
-            console.log('Could not find project in selected folder');
-          }
+          console.warn('Failed to restore from auto-save:', e);
         }
-        
-      } catch (e: unknown) {
-        // User cancelled or permission not granted
-        if ((e as Error).name !== 'AbortError') {
-          console.log('Could not restore last opened project from file system:', e);
-        }
-        // If we get here, the user either cancelled or permissions weren't granted
-        // As a fallback, try to restore just the project structure from localStorage
-        if (autoSaveData) {
-          try {
-            const serialized = JSON.parse(autoSaveData) as SerializedProject;
-            const tracks = convertToTracks(serialized.tracks);
-            await hydrateAudioFromCache(tracks);
-            trackStore.getState().setTracks(tracks);
-            transportStore.getState().setTransportState(serialized.transport);
-            set({ currentProjectName: serialized.name });
-            console.log('Restored project structure from auto-save as fallback');
-          } catch (e2) {
-            console.log('Could not restore from any source');
-          }
-        }
+      } else {
+        console.log('No previous project to restore');
       }
-      
     } catch (e) {
       console.error('Error restoring last opened project:', e);
     }
   },
+
+  reconnectProjectFolder: async () => {
+    const pending = get().pendingReconnect;
+    if (!pending) return;
+    try {
+      const permission = await (pending.handle as any).requestPermission({ mode: 'readwrite' });
+      if (permission === 'granted') {
+        await get().loadProject(pending.handle);
+      }
+    } catch (e) {
+      console.error('Failed to reconnect to project folder:', e);
+    } finally {
+      set({ pendingReconnect: null });
+    }
+  },
+
+  dismissReconnect: () => set({ pendingReconnect: null }),
 
   saveCurrentProject: async (tracks, transportState, name) => {
     const state = get();
@@ -235,10 +227,6 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
         
         // Save to auto-save for F5 restore
         try {
-          localStorage.setItem(LAST_OPENED_PROJECT_KEY, JSON.stringify({
-            projectName: projectName,
-            projectId: projectId,
-          }));
           localStorage.setItem(PROJECT_AUTO_SAVE_KEY, JSON.stringify(serialized));
         } catch (e) {
           console.warn('Failed to save project to auto-save:', e);
@@ -274,13 +262,13 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
           fileStructure: structure,
           lastUsedDirectory: state.lastUsedDirectory, // Keep the same last used directory
         });
-        
+
+        if (structure.folderHandle) {
+          void handleStore.saveHandle(PROJECT_FOLDER_HANDLE_KEY, structure.folderHandle);
+        }
+
         // Save to auto-save for F5 restore
         try {
-          localStorage.setItem(LAST_OPENED_PROJECT_KEY, JSON.stringify({
-            projectName: projectName,
-            projectId: projectId,
-          }));
           localStorage.setItem(PROJECT_AUTO_SAVE_KEY, JSON.stringify(serialized));
         } catch (e) {
           console.warn('Failed to save project to auto-save:', e);
@@ -325,13 +313,14 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
         fileStructure: structure,
         lastUsedDirectory: baseDirHandle, // Remember the base directory for next time
       });
-      
+
+      void handleStore.saveHandle(BASE_DIRECTORY_HANDLE_KEY, baseDirHandle);
+      if (structure.folderHandle) {
+        void handleStore.saveHandle(PROJECT_FOLDER_HANDLE_KEY, structure.folderHandle);
+      }
+
       // Save to auto-save for F5 restore
       try {
-        localStorage.setItem(LAST_OPENED_PROJECT_KEY, JSON.stringify({
-          projectName: projectName,
-          projectId: projectId,
-        }));
         localStorage.setItem(PROJECT_AUTO_SAVE_KEY, JSON.stringify(serialized));
       } catch (e) {
         console.warn('Failed to save project to auto-save:', e);
@@ -381,15 +370,11 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
         audioDirHandle,
       },
     });
-    
+
+    void handleStore.saveHandle(PROJECT_FOLDER_HANDLE_KEY, folderHandle);
+
     // Save this as the last opened project for auto-restore on F5
     try {
-      localStorage.setItem(LAST_OPENED_PROJECT_KEY, JSON.stringify({
-        projectName: serialized.name,
-        projectId: projectId,
-      }));
-      
-      // Also save the complete serialized project for auto-restore
       localStorage.setItem(PROJECT_AUTO_SAVE_KEY, JSON.stringify(serialized));
     } catch (e) {
       console.warn('Failed to save project info for auto-restore:', e);
@@ -409,8 +394,9 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
       currentProjectId: projectId,
       currentProjectName: projectName,
       fileStructure: null,
+      pendingReconnect: null,
     });
-    
+
     // Save empty metadata
     saveProjectMetadata({
       id: projectId,
@@ -418,10 +404,13 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
       createdAt: now,
       updatedAt: now,
     });
-    
+
     // Clear audio buffer map and its durable cache
     engine.clearAllBuffers();
     void bufferCache.clearBufferCache();
+    // A brand new project has no folder yet - don't let a refresh try to
+    // reconnect to whatever project was open before this one.
+    void handleStore.deleteHandle(PROJECT_FOLDER_HANDLE_KEY);
   },
 
   deleteProject: (id) => {
@@ -431,7 +420,9 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
         currentProjectId: null,
         currentProjectName: 'Untitled Project',
         fileStructure: null,
+        pendingReconnect: null,
       });
+      void handleStore.deleteHandle(PROJECT_FOLDER_HANDLE_KEY);
     }
   },
 
