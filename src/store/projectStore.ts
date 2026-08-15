@@ -137,7 +137,9 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
           );
           console.log('[restore] queryPermission result:', permission);
           if (permission === 'granted') {
-            await get().loadProject(storedProjectDir);
+            const { tracks, transport } = await get().loadProject(storedProjectDir);
+            trackStore.getState().setTracks(tracks);
+            transportStore.getState().setTransportState(transport);
             console.log('[restore] reconnected to last project folder:', storedProjectDir.name);
             return;
           }
@@ -196,7 +198,9 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
     try {
       const permission = await (pending.handle as any).requestPermission({ mode: 'readwrite' });
       if (permission === 'granted') {
-        await get().loadProject(pending.handle);
+        const { tracks, transport } = await get().loadProject(pending.handle);
+        trackStore.getState().setTracks(tracks);
+        transportStore.getState().setTransportState(transport);
       }
     } catch (e) {
       console.error('Failed to reconnect to project folder:', e);
