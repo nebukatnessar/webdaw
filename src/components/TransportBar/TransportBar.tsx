@@ -155,12 +155,37 @@ export default function TransportBar() {
     setShowExportDialog(true);
   };
 
+  const handleSaveClick = () => {
+    // Once a project has a name (created, loaded, or previously saved), save
+    // straight back into it instead of re-prompting for a name every time.
+    if (projectStore.currentProjectId) {
+      void quickSave();
+    } else {
+      setShowProjectDialog('save');
+    }
+  };
+
+  const quickSave = async () => {
+    try {
+      await projectStore.saveCurrentProject(tracks, transportState);
+    } catch (e) {
+      console.error('Quick save failed, falling back to Save dialog:', e);
+      setShowProjectDialog('save');
+    }
+  };
+
   const project: Project = {
     id: 'current',
     name: 'Untitled Project',
     bpm,
     tracks,
   };
+
+  useEffect(() => {
+    document.title = projectStore.currentProjectId
+      ? `${projectStore.currentProjectName} - WebDAW`
+      : 'WebDAW';
+  }, [projectStore.currentProjectId, projectStore.currentProjectName]);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -177,7 +202,7 @@ export default function TransportBar() {
       }
       if (mod && e.key.toLowerCase() === 's') {
         e.preventDefault();
-        setShowProjectDialog('save');
+        handleSaveClick();
         return;
       }
       if (e.code === 'Space') {
@@ -280,12 +305,16 @@ export default function TransportBar() {
         </button>
         <button
           className={styles.btn + ' ' + styles.projectBtn}
-          onClick={() => setShowProjectDialog('save')}
+          onClick={handleSaveClick}
           aria-label="Save Project"
-          title="Save Project (Ctrl+S)"
+          title={projectStore.currentProjectId ? 'Save Project (Ctrl+S)' : 'Save Project - choose a name (Ctrl+S)'}
         >
           💾 Save
         </button>
+
+        <span className={styles.projectName} title="Current project">
+          {projectStore.currentProjectName}
+        </span>
 
         <div className={styles.divider} />
 

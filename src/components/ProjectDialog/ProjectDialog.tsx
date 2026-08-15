@@ -11,7 +11,8 @@ export interface ProjectDialogProps {
 }
 
 export default function ProjectDialog({ onClose, mode }: ProjectDialogProps) {
-  const [name, setName] = useState('');
+  const currentProjectName = useProjectStore((s) => s.currentProjectName);
+  const [name, setName] = useState(mode === 'save' ? currentProjectName : '');
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   
