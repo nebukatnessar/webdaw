@@ -43,8 +43,6 @@ export default function TransportBar() {
   const [showProjectDialog, setShowProjectDialog] = useState<false | 'save' | 'load' | 'new' | 'open'>(false);
 
   const rafRef = useRef<number | null>(null);
-  const anchorCtxTimeRef = useRef(0);
-  const anchorBeatsRef = useRef(0);
   const bpmRef = useRef(bpm);
   bpmRef.current = bpm;
   const lastBpmRef = useRef(bpm);
@@ -58,14 +56,7 @@ export default function TransportBar() {
     }
     const startAudio = async () => {
       await engine.resumeContext();
-      const ctx = engine.getAudioContext();
-      anchorCtxTimeRef.current = ctx.currentTime;
-      anchorBeatsRef.current = playheadBeats;
-      engine.schedulePlayback(
-        tracks,
-        anchorBeatsRef.current,
-        bpmRef.current,
-      );
+      engine.startPlaybackAt(tracks, playheadBeats, bpmRef.current);
       play();
     };
     void startAudio();
@@ -230,35 +221,21 @@ export default function TransportBar() {
     }
     
     if (bpm !== lastBpmRef.current) {
-      const ctx = engine.getAudioContext();
-      anchorCtxTimeRef.current = ctx.currentTime;
-      anchorBeatsRef.current = playheadBeats;
+      engine.reanchorPlayhead(playheadBeats);
       lastBpmRef.current = bpm;
     }
-    
+
     const tick = () => {
-      const elapsed = engine.getAudioContext().currentTime - anchorCtxTimeRef.current;
-      let newPlayhead = anchorBeatsRef.current + (elapsed * bpmRef.current) / 60;
-      
+      let newPlayhead = engine.computePlayheadBeats(bpmRef.current);
+
       if (isRepeat && selectionStart !== null && selectionEnd !== null) {
         if (newPlayhead >= selectionEnd) {
           const loopDuration = selectionEnd - selectionStart;
           newPlayhead = selectionStart + ((newPlayhead - selectionStart) % loopDuration);
-          
-          const ctx = engine.getAudioContext();
-          const beatsIntoLoop = newPlayhead - selectionStart;
-          anchorCtxTimeRef.current = ctx.currentTime - (beatsIntoLoop * 60 / bpmRef.current);
-          anchorBeatsRef.current = newPlayhead;
-          
-          engine.stopAllSources();
-          engine.schedulePlayback(
-            useTrackStore.getState().tracks,
-            newPlayhead,
-            bpmRef.current,
-          );
+          engine.seekDuringPlayback(useTrackStore.getState().tracks, newPlayhead, bpmRef.current);
         }
       }
-      
+
       setPlayheadBeats(newPlayhead);
       rafRef.current = requestAnimationFrame(tick);
     };

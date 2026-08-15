@@ -1,9 +1,9 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect, useMemo } from 'react';
 import type { RefObject } from 'react';
 import styles from './ArrangeView.module.css';
 import { useTrackStore } from '../../store/trackStore';
 import { useTransportStore, usePixelsPerBeat } from '../../store/transportStore';
-import { BEATS_PER_BAR, TOTAL_WIDTH } from '../../constants';
+import { BEATS_PER_BAR, MIN_TOTAL_BARS, TIMELINE_MARGIN_BARS } from '../../constants';
 import * as engine from '../../audio/engine';
 import ClipBlock from './ClipBlock';
 import Ruler from './Ruler';
@@ -13,17 +13,52 @@ interface Props {
   onScroll: (e: React.UIEvent<HTMLDivElement>) => void;
 }
 
+// How close (in px) the playhead can get to the visible edge before the
+// arrange view auto-scrolls to keep it in view during playback.
+const AUTO_SCROLL_MARGIN = 60;
+
 export default function ArrangeView({ scrollRef, onScroll }: Props) {
   const tracks = useTrackStore((s) => s.tracks);
   const addClip = useTrackStore((s) => s.addClip);
   const moveClip = useTrackStore((s) => s.moveClip);
   const createTracksForClips = useTrackStore((s) => s.createTracksForClips);
   const playheadBeats = useTransportStore((s) => s.playheadBeats);
+  const isPlaying = useTransportStore((s) => s.isPlaying);
   const pixelsPerBeat = usePixelsPerBeat();
   const setZoomLevel = useTransportStore((s) => s.setZoomLevel);
   const selectionStart = useTransportStore((s) => s.selectionStart);
   const selectionEnd = useTransportStore((s) => s.selectionEnd);
   const [dragOverTrackId, setDragOverTrackId] = useState<string | null>(null);
+
+  // Timeline length grows to fit the furthest clip instead of truncating at
+  // a fixed bar count - short/empty projects still get a sane minimum.
+  const totalBars = useMemo(() => {
+    const furthestBeat = tracks.reduce((max, track) => {
+      const trackMax = track.clips.reduce((m, c) => Math.max(m, c.startBeat + c.durationBeats), 0);
+      return Math.max(max, trackMax);
+    }, 0);
+    const neededBars = Math.ceil(furthestBeat / BEATS_PER_BAR) + TIMELINE_MARGIN_BARS;
+    return Math.max(MIN_TOTAL_BARS, neededBars);
+  }, [tracks]);
+  const totalWidth = totalBars * BEATS_PER_BAR * pixelsPerBeat;
+
+  // Auto-scroll to keep the playhead in view while playing, without
+  // fighting a manual scroll: only nudge scrollLeft once the playhead
+  // actually nears/exceeds the visible edge, rather than recentering it.
+  useEffect(() => {
+    if (!isPlaying) return;
+    const scroll = scrollRef.current;
+    if (!scroll) return;
+    const playheadX = playheadBeats * pixelsPerBeat;
+    const viewLeft = scroll.scrollLeft;
+    const viewRight = viewLeft + scroll.clientWidth;
+
+    if (playheadX > viewRight - AUTO_SCROLL_MARGIN) {
+      scroll.scrollLeft = playheadX - AUTO_SCROLL_MARGIN;
+    } else if (playheadX < viewLeft) {
+      scroll.scrollLeft = playheadX;
+    }
+  }, [isPlaying, playheadBeats, pixelsPerBeat, scrollRef]);
 
   const handleWheel = useCallback((e: React.WheelEvent) => {
     if (e.altKey) {
@@ -163,10 +198,10 @@ export default function ArrangeView({ scrollRef, onScroll }: Props) {
     <div className={styles.outer}>
       <div className={styles.scroll} ref={scrollRef} onScroll={onScroll}>
         {/* Content container — full timeline width */}
-        <div className={styles.inner} style={{ width: TOTAL_WIDTH }} onWheel={handleWheel}>
+        <div className={styles.inner} style={{ width: totalWidth }} onWheel={handleWheel}>
 
           {/* Ruler: sticky vertically, scrolls horizontally with content */}
-          <Ruler pixelsPerBeat={pixelsPerBeat} scrollRef={scrollRef} />
+          <Ruler pixelsPerBeat={pixelsPerBeat} scrollRef={scrollRef} totalBars={totalBars} />
 
           {/* Time selection overlay */}
           {selectionStart !== null && selectionEnd !== null && (

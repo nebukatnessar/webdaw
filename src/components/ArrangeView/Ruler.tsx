@@ -2,21 +2,36 @@ import { useState, useRef, useCallback } from 'react';
 import type { RefObject } from 'react';
 import styles from './ArrangeView.module.css';
 import { useTransportStore } from '../../store/transportStore';
-import { BEATS_PER_BAR, TOTAL_BARS } from '../../constants';
+import { useTrackStore } from '../../store/trackStore';
+import { BEATS_PER_BAR } from '../../constants';
 import * as engine from '../../audio/engine';
 
 interface Props {
   scrollRef: RefObject<HTMLDivElement | null>;
   pixelsPerBeat: number;
+  totalBars: number;
 }
 
-export default function Ruler({ scrollRef, pixelsPerBeat }: Props) {
-  const bars = Array.from({ length: TOTAL_BARS }, (_, i) => i);
-  const isPlaying = useTransportStore((s) => s.isPlaying);
+export default function Ruler({ scrollRef, pixelsPerBeat, totalBars }: Props) {
+  const bars = Array.from({ length: totalBars }, (_, i) => i);
   const setPlayheadBeats = useTransportStore((s) => s.setPlayheadBeats);
   const setSelection = useTransportStore((s) => s.setSelection);
   const clearSelection = useTransportStore((s) => s.clearSelection);
-  const pause = useTransportStore((s) => s.pause);
+
+  // Relocating the playhead used to always pause playback. Instead, if
+  // something's already playing, reschedule from the new position so
+  // playback carries on uninterrupted; setPlayheadBeats always runs so the
+  // UI reflects the new position either way.
+  const relocatePlayhead = useCallback((beat: number) => {
+    if (useTransportStore.getState().isPlaying) {
+      engine.seekDuringPlayback(
+        useTrackStore.getState().tracks,
+        beat,
+        useTransportStore.getState().bpm,
+      );
+    }
+    setPlayheadBeats(beat);
+  }, [setPlayheadBeats]);
 
   const [isDragging, setIsDragging] = useState(false);
   const dragStartXRef = useRef(0);
@@ -34,22 +49,19 @@ export default function Ruler({ scrollRef, pixelsPerBeat }: Props) {
   const handleMouseDown = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
     const beat = getBeatFromClientX(e.clientX);
     const snappedBeat = Math.round(beat);
-    
-    if (isPlaying) {
-      engine.stopAllSources();
-      pause();
-    }
-    
+
     // Start potential drag
     setIsDragging(true);
     dragStartXRef.current = e.clientX;
     initialPlayheadRef.current = snappedBeat;  // Remember the clicked position
     hasMovedRef.current = false;  // Reset movement flag
-    
+
+    relocatePlayhead(snappedBeat);
+
     // Don't create selection yet - wait for actual drag movement
-    
+
     e.preventDefault();
-  }, [isPlaying, pause, getBeatFromClientX]);
+  }, [getBeatFromClientX, relocatePlayhead]);
 
   const handleMouseMove = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
     if (!isDragging) return;
@@ -97,18 +109,18 @@ export default function Ruler({ scrollRef, pixelsPerBeat }: Props) {
         if (currentX < initialX) {
           const start = Math.min(snappedBeat, startPos);
           setSelection(start, startPos);
-          setPlayheadBeats(start);
+          relocatePlayhead(start);
         } else {
           setSelection(startPos, Math.max(snappedBeat, startPos));
-          setPlayheadBeats(startPos);
+          relocatePlayhead(startPos);
         }
         justDraggedRef.current = true;
       }
-      
+
       setIsDragging(false);
       e.preventDefault();
     }
-  }, [isDragging, getBeatFromClientX, setSelection, setPlayheadBeats]);
+  }, [isDragging, getBeatFromClientX, setSelection, relocatePlayhead]);
 
   const handleMouseLeave = useCallback(() => {
     if (isDragging) {
@@ -129,13 +141,9 @@ export default function Ruler({ scrollRef, pixelsPerBeat }: Props) {
     const contentX = e.clientX - rect.left + scroll.scrollLeft;
     const rawBeat = contentX / pixelsPerBeat;
     const snappedBeat = Math.max(0, Math.round(rawBeat));
-    if (isPlaying) {
-      engine.stopAllSources();
-      pause();
-    }
-    setPlayheadBeats(snappedBeat);
+    relocatePlayhead(snappedBeat);
     // Don't create or clear selection on simple click
-  }, [scrollRef, pixelsPerBeat, isPlaying, pause, setPlayheadBeats]);
+  }, [scrollRef, pixelsPerBeat, relocatePlayhead]);
 
   return (
     <div 

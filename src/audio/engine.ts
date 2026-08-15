@@ -203,3 +203,52 @@ export function stopAllSources(): void {
   }
   activeSources.length = 0;
 }
+
+// Anchor (audio-clock time + beat position) that the displayed playhead is
+// currently timed against. Lives here rather than as component-local state
+// so any part of the UI (the transport's own playback loop, or the ruler
+// when the user relocates the playhead) can jump the playhead to a new
+// position without needing to stop playback to do it.
+let anchorCtxTime = 0;
+let anchorBeats = 0;
+
+/**
+ * Start playing back `tracks` from `beats`, anchoring the playhead clock to
+ * the current audio time. Used for the initial Play press.
+ */
+export function startPlaybackAt(tracks: Track[], beats: number, bpm: number): void {
+  const ctx = getAudioContext();
+  anchorCtxTime = ctx.currentTime;
+  anchorBeats = beats;
+  schedulePlayback(tracks, beats, bpm);
+}
+
+/**
+ * Jump to a new playhead position while already playing: stops whatever is
+ * currently scheduled and reschedules from the new position, re-anchoring
+ * the clock so playback continues rather than requiring a pause/resume.
+ */
+export function seekDuringPlayback(tracks: Track[], beats: number, bpm: number): void {
+  stopAllSources();
+  startPlaybackAt(tracks, beats, bpm);
+}
+
+/**
+ * Re-anchors the playhead clock to the current time without touching what's
+ * scheduled - used when BPM changes mid-playback so the displayed playhead
+ * keeps advancing smoothly at the new rate.
+ */
+export function reanchorPlayhead(beats: number): void {
+  anchorCtxTime = getAudioContext().currentTime;
+  anchorBeats = beats;
+}
+
+/**
+ * Computes the current playhead position (in beats) from the anchor -
+ * polled once per animation frame to drive the playhead display.
+ */
+export function computePlayheadBeats(bpm: number): number {
+  const ctx = getAudioContext();
+  const elapsed = ctx.currentTime - anchorCtxTime;
+  return anchorBeats + (elapsed * bpm) / 60;
+}
