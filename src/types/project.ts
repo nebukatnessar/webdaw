@@ -16,6 +16,7 @@ export interface ProjectTransportState {
   zoomLevel: number;
   selectionStart: number | null;
   selectionEnd: number | null;
+  masterVolume: number;
 }
 
 // Full project state that gets saved to project.json

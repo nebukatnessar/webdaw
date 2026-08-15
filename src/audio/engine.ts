@@ -6,6 +6,24 @@ let audioCtx: AudioContext | null = null;
 const bufferMap = new Map<string, AudioBuffer>();
 const activeSources: AudioBufferSourceNode[] = [];
 
+// Single persistent master gain node that every track routes through
+// before reaching the speakers, so there's one final volume stage for the
+// whole mix (matching a DAW's master fader) instead of each track going
+// straight to destination.
+let masterGainNode: GainNode | null = null;
+
+function getMasterGainNode(ctx: AudioContext): GainNode {
+  if (!masterGainNode) {
+    masterGainNode = ctx.createGain();
+    masterGainNode.connect(ctx.destination);
+  }
+  return masterGainNode;
+}
+
+export function setMasterVolume(volume: number): void {
+  getMasterGainNode(getAudioContext()).gain.value = volume;
+}
+
 // One persistent gain+pan node per track, reused across the whole session
 // instead of being recreated (and re-snapshotted) every time playback
 // starts. This is what lets volume/pan/mute/solo changes take effect live,
@@ -18,7 +36,7 @@ function getOrCreateTrackNodes(ctx: AudioContext, trackId: string) {
     const gainNode = ctx.createGain();
     const panner = ctx.createStereoPanner();
     gainNode.connect(panner);
-    panner.connect(ctx.destination);
+    panner.connect(getMasterGainNode(ctx));
     nodes = { gainNode, panner };
     trackNodes.set(trackId, nodes);
   }

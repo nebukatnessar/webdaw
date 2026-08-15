@@ -12,7 +12,7 @@ import type { Project } from '../../types/daw';
 import type { Project as FullProject } from '../../types/project';
 
 export default function TransportBar() {
-  const { bpm, isPlaying, playheadBeats, isRepeat, zoomLevel, selectionStart, selectionEnd, setBpm, play, pause, stop, setPlayheadBeats, toggleRepeat, setTransportState } =
+  const { bpm, isPlaying, playheadBeats, isRepeat, zoomLevel, selectionStart, selectionEnd, masterVolume, setBpm, play, pause, stop, setPlayheadBeats, toggleRepeat, setTransportState } =
     useTransportStore();
   const tracks = useTrackStore((s) => s.tracks);
   const setTracks = useTrackStore((s) => s.setTracks);
@@ -179,6 +179,7 @@ export default function TransportBar() {
     name: 'Untitled Project',
     bpm,
     tracks,
+    masterVolume,
   };
 
   useEffect(() => {
@@ -281,6 +282,7 @@ export default function TransportBar() {
     zoomLevel,
     selectionStart,
     selectionEnd,
+    masterVolume,
   };
 
   return (

@@ -95,7 +95,7 @@ export async function exportProjectAsWAV(
   );
   
   const masterGain = offlineCtx.createGain();
-  masterGain.gain.value = 1.0;
+  masterGain.gain.value = project.masterVolume ?? 1;
   masterGain.connect(offlineCtx.destination);
   
   for (const track of tracksToExport) {

@@ -8,6 +8,7 @@ interface TransportState {
   zoomLevel: number;
   selectionStart: number | null;
   selectionEnd: number | null;
+  masterVolume: number;
   setBpm: (bpm: number) => void;
   play: () => void;
   pause: () => void;
@@ -17,6 +18,7 @@ interface TransportState {
   setZoomLevel: (zoomLevel: number) => void;
   setSelection: (start: number | null, end: number | null) => void;
   clearSelection: () => void;
+  setMasterVolume: (volume: number) => void;
   setTransportState: (state: {
     bpm: number;
     playheadBeats: number;
@@ -24,6 +26,7 @@ interface TransportState {
     zoomLevel: number;
     selectionStart: number | null;
     selectionEnd: number | null;
+    masterVolume?: number;
   }) => void;
 }
 
@@ -35,6 +38,7 @@ export const useTransportStore = create<TransportState>((set) => ({
   zoomLevel: 1,
   selectionStart: null,
   selectionEnd: null,
+  masterVolume: 1,
   setBpm: (bpm) => set({ bpm }),
   play: () => set({ isPlaying: true }),
   pause: () => set({ isPlaying: false }),
@@ -44,6 +48,7 @@ export const useTransportStore = create<TransportState>((set) => ({
   setZoomLevel: (zoomLevel) => set({ zoomLevel: Math.max(0.1, Math.min(10, zoomLevel)) }),
   setSelection: (start, end) => set({ selectionStart: start, selectionEnd: end }),
   clearSelection: () => set({ selectionStart: null, selectionEnd: null }),
+  setMasterVolume: (masterVolume) => set({ masterVolume: Math.max(0, Math.min(1, masterVolume)) }),
   setTransportState: (state) => set({
     bpm: state.bpm,
     playheadBeats: state.playheadBeats,
@@ -51,6 +56,8 @@ export const useTransportStore = create<TransportState>((set) => ({
     zoomLevel: state.zoomLevel,
     selectionStart: state.selectionStart,
     selectionEnd: state.selectionEnd,
+    // Older saved projects won't have this field - default to unity gain.
+    masterVolume: state.masterVolume ?? 1,
   }),
 }));
 

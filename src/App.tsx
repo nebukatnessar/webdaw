@@ -3,6 +3,7 @@ import styles from './App.module.css';
 import TransportBar from './components/TransportBar/TransportBar';
 import TrackHeaderList from './components/TrackHeaderList/TrackHeaderList';
 import ArrangeView from './components/ArrangeView/ArrangeView';
+import MasterFader from './components/MasterFader/MasterFader';
 import { useProjectStore } from './store/projectStore';
 
 function App() {
@@ -64,6 +65,7 @@ function App() {
       <div className={styles.workspace}>
         <TrackHeaderList scrollRef={headerRef} onScroll={onHeaderScroll} />
         <ArrangeView scrollRef={arrangeRef} onScroll={onArrangeScroll} />
+        <MasterFader />
       </div>
     </div>
   );

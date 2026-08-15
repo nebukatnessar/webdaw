@@ -28,6 +28,7 @@ export default function ProjectDialog({ onClose, mode }: ProjectDialogProps) {
   const zoomLevel = useTransportStore((s) => s.zoomLevel);
   const selectionStart = useTransportStore((s) => s.selectionStart);
   const selectionEnd = useTransportStore((s) => s.selectionEnd);
+  const masterVolume = useTransportStore((s) => s.masterVolume);
   const setTransportState = useTransportStore((s) => s.setTransportState);
   
   // Project store
@@ -56,6 +57,7 @@ export default function ProjectDialog({ onClose, mode }: ProjectDialogProps) {
         zoomLevel,
         selectionStart,
         selectionEnd,
+        masterVolume,
       }, name.trim());
       onClose();
     } catch (e: unknown) {
@@ -67,7 +69,7 @@ export default function ProjectDialog({ onClose, mode }: ProjectDialogProps) {
     } finally {
       setIsLoading(false);
     }
-  }, [name, tracks, bpm, playheadBeats, isRepeat, zoomLevel, selectionStart, selectionEnd, projectStore, onClose]);
+  }, [name, tracks, bpm, playheadBeats, isRepeat, zoomLevel, selectionStart, selectionEnd, masterVolume, projectStore, onClose]);
 
   const handleNewProject = useCallback(async () => {
     setIsLoading(true);
@@ -112,6 +114,7 @@ export default function ProjectDialog({ onClose, mode }: ProjectDialogProps) {
         zoomLevel: transport.zoomLevel,
         selectionStart: transport.selectionStart,
         selectionEnd: transport.selectionEnd,
+        masterVolume: transport.masterVolume,
       });
       
       onClose();
@@ -160,6 +163,7 @@ export default function ProjectDialog({ onClose, mode }: ProjectDialogProps) {
         zoomLevel: transport.zoomLevel,
         selectionStart: transport.selectionStart,
         selectionEnd: transport.selectionEnd,
+        masterVolume: transport.masterVolume,
       });
       
       onClose();

@@ -73,6 +73,7 @@ export function createProjectFromState(
     zoomLevel: number;
     selectionStart: number | null;
     selectionEnd: number | null;
+    masterVolume: number;
   },
   name: string = 'Untitled Project'
 ): SerializedProject {
@@ -86,6 +87,7 @@ export function createProjectFromState(
       zoomLevel: transportState.zoomLevel,
       selectionStart: transportState.selectionStart,
       selectionEnd: transportState.selectionEnd,
+      masterVolume: transportState.masterVolume,
     },
     tracks: tracks.map((track) => ({
       id: track.id,

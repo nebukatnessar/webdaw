@@ -26,4 +26,5 @@ export interface Project {
   name: string;
   bpm: number;
   tracks: Track[];
+  masterVolume: number;
 }

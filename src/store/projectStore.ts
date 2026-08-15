@@ -174,6 +174,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
             zoomLevel: serialized.transport.zoomLevel,
             selectionStart: serialized.transport.selectionStart,
             selectionEnd: serialized.transport.selectionEnd,
+            masterVolume: serialized.transport.masterVolume,
           });
           set({
             currentProjectId: `restored-${Date.now()}`,
