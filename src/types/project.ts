@@ -1,5 +1,3 @@
-import type { Track } from './daw';
-
 // Project metadata stored in localStorage for the load dialog
 export interface ProjectMetadata {
   id: string;

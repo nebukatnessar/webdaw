@@ -1,7 +1,6 @@
 import { create } from 'zustand';
 import type { Track } from '../types/daw';
 import type {
-  Project,
   SerializedProject,
   ProjectMetadata,
   ProjectTransportState,

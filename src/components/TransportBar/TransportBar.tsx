@@ -9,16 +9,13 @@ import * as recording from '../../audio/recording';
 import ExportDialog from '../ExportDialog/ExportDialog';
 import ProjectDialog from '../ProjectDialog/ProjectDialog';
 import type { Project } from '../../types/daw';
-import type { Project as FullProject } from '../../types/project';
 
 export default function TransportBar() {
-  const { bpm, isPlaying, playheadBeats, isRepeat, zoomLevel, selectionStart, selectionEnd, masterVolume, setBpm, play, pause, stop, setPlayheadBeats, toggleRepeat, setTransportState } =
+  const { bpm, isPlaying, playheadBeats, isRepeat, zoomLevel, selectionStart, selectionEnd, masterVolume, setBpm, play, pause, stop, setPlayheadBeats, toggleRepeat } =
     useTransportStore();
   const tracks = useTrackStore((s) => s.tracks);
-  const setTracks = useTrackStore((s) => s.setTracks);
   const addTrack = useTrackStore((s) => s.addTrack);
   const addClip = useTrackStore((s) => s.addClip);
-  const clearTracks = useTrackStore((s) => s.clearTracks);
 
   const projectStore = useProjectStore();
 
@@ -90,7 +87,13 @@ export default function TransportBar() {
 
   const handleRecordToggle = () => {
     if (isRecording) {
-      void finishRecording();
+      const wasPlaying = useTransportStore.getState().isPlaying;
+      void finishRecording().then(() => {
+        if (wasPlaying) {
+          engine.stopAllSources();
+          pause();
+        }
+      });
       return;
     }
     if (!canRecord) return;

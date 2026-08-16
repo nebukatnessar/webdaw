@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react';
+import { useState } from 'react';
 import styles from './ExportDialog.module.css';
 import type { Track, Project } from '../../types/daw';
 import { exportAndDownloadTrack, exportAndDownloadProject, ExportOptions } from '../../audio/export';

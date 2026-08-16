@@ -5,6 +5,15 @@ let activeStream: MediaStream | null = null;
 let activeRecorder: MediaRecorder | null = null;
 let recordedChunks: BlobPart[] = [];
 let countInCancelled = false;
+let monitorSource: MediaStreamAudioSourceNode | null = null;
+let monitorGain: GainNode | null = null;
+
+function teardownMonitor(): void {
+  monitorSource?.disconnect();
+  monitorGain?.disconnect();
+  monitorSource = null;
+  monitorGain = null;
+}
 
 export async function listInputDevices(): Promise<MediaDeviceInfo[]> {
   const devices = await navigator.mediaDevices.enumerateDevices();
@@ -60,12 +69,22 @@ export async function startRecording(deviceId: string | null): Promise<void> {
   activeStream = stream;
   recordedChunks = [];
 
+  // Route the mic to output for immediate record monitoring.
+  const ctx = getAudioContext();
+  teardownMonitor();
+  monitorSource = ctx.createMediaStreamSource(stream);
+  monitorGain = ctx.createGain();
+  monitorGain.gain.value = 1;
+  monitorSource.connect(monitorGain);
+  monitorGain.connect(ctx.destination);
+
   const recorder = new MediaRecorder(stream);
   recorder.ondataavailable = (e) => {
     if (e.data.size > 0) recordedChunks.push(e.data);
   };
   activeRecorder = recorder;
-  recorder.start();
+  // Emit chunks while recording to make stop/finalization more robust.
+  recorder.start(100);
 }
 
 /**
@@ -79,11 +98,22 @@ export async function stopRecording(): Promise<AudioBuffer | null> {
   if (!recorder) return null;
 
   const blob: Blob = await new Promise((resolve) => {
-    recorder.onstop = () => resolve(new Blob(recordedChunks, { type: recorder.mimeType }));
+    if (recorder.state === 'inactive') {
+      resolve(new Blob(recordedChunks, { type: recorder.mimeType || 'audio/webm' }));
+      return;
+    }
+
+    recorder.onstop = () => resolve(new Blob(recordedChunks, { type: recorder.mimeType || 'audio/webm' }));
+    try {
+      recorder.requestData();
+    } catch {
+      // requestData may throw on some implementations; stop still finalizes.
+    }
     recorder.stop();
   });
 
   stream?.getTracks().forEach((track) => track.stop());
+  teardownMonitor();
   activeRecorder = null;
   activeStream = null;
   recordedChunks = [];

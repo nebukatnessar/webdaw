@@ -1,13 +1,10 @@
-import { getBuffer, storeBuffer, decodeFile } from '../audio/engine';
+import { decodeFile } from '../audio/engine';
 import { encodeWav } from '../audio/wav';
-import type { Track, Clip } from '../types/daw';
+import type { Track } from '../types/daw';
 import type {
-  Project,
   SerializedProject,
   SerializedTrack,
-  SerializedClip,
   ProjectMetadata,
-  LoadableProject,
   ProjectFileStructure,
 } from '../types/project';
 
@@ -195,6 +192,7 @@ export async function saveAudioToProject(
   clipId: string,
   clipName: string
 ): Promise<string> {
+  void clipName;
   const fileName = `${clipId}.wav`;
   const fileHandle = await audioDirHandle.getFileHandle(fileName, { create: true });
 
@@ -235,6 +233,7 @@ export async function exportProjectAsZip(
   project: SerializedProject,
   audioBuffers: Map<string, AudioBuffer>
 ): Promise<Blob> {
+  void audioBuffers;
   // This would require a JSZip library or similar
   // For now, we'll just export the project.json and let users handle audio separately
   // TODO: Implement proper ZIP export
