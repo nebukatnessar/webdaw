@@ -8,6 +8,7 @@ import * as engine from '../../audio/engine';
 import * as recording from '../../audio/recording';
 import ExportDialog from '../ExportDialog/ExportDialog';
 import ProjectDialog from '../ProjectDialog/ProjectDialog';
+import { toggleTheme, setHighContrast, isHighContrast, getTheme } from '../../utils/theme';
 import type { Project } from '../../types/daw';
 
 export default function TransportBar() {
@@ -38,12 +39,29 @@ export default function TransportBar() {
 
   const [showExportDialog, setShowExportDialog] = useState(false);
   const [showProjectDialog, setShowProjectDialog] = useState<false | 'save' | 'load' | 'new' | 'open'>(false);
+  const [currentTheme, setCurrentTheme] = useState(getTheme());
+  const [highContrastEnabled, setHighContrastEnabled] = useState(isHighContrast());
 
   const rafRef = useRef<number | null>(null);
   const bpmRef = useRef(bpm);
   bpmRef.current = bpm;
   const lastBpmRef = useRef(bpm);
   const recordStartBeatRef = useRef(0);
+
+  // Update theme state when theme changes
+  useEffect(() => {
+    const updateThemeState = () => {
+      setCurrentTheme(getTheme());
+      setHighContrastEnabled(isHighContrast());
+    };
+    
+    // Listen for theme change events
+    window.addEventListener('themechange', updateThemeState);
+    
+    return () => {
+      window.removeEventListener('themechange', updateThemeState);
+    };
+  }, []);
 
   const handlePlayPause = () => {
     if (isPlaying) {
@@ -254,6 +272,18 @@ export default function TransportBar() {
   const bar = Math.floor(playheadBeats / 4) + 1;
   const beat = (Math.floor(playheadBeats % 4) + 1).toString().padStart(2, '0');
 
+  // Theme toggle handlers
+  const handleToggleTheme = () => {
+    const newTheme = toggleTheme();
+    setCurrentTheme(newTheme);
+  };
+
+  const handleToggleHighContrast = () => {
+    const newHighContrast = !highContrastEnabled;
+    setHighContrastEnabled(newHighContrast);
+    setHighContrast(newHighContrast);
+  };
+
   // Get transport state for saving
   const transportState = {
     bpm,
@@ -397,6 +427,25 @@ export default function TransportBar() {
 
         <button className={styles.btn + ' ' + styles.addTrackBtn} onClick={addTrack}>
           + Track
+        </button>
+
+        {/* Theme toggle buttons */}
+        <div className={styles.divider} />
+        <button
+          className={styles.btn + ' ' + styles.themeBtn}
+          onClick={handleToggleTheme}
+          aria-label="Toggle Light/Dark Mode"
+          title="Toggle Light/Dark Mode"
+        >
+          {currentTheme === 'light' ? '☀️' : '🌙'}
+        </button>
+        <button
+          className={styles.btn + ' ' + styles.themeBtn + ' ' + (highContrastEnabled ? styles.active : '')}
+          onClick={handleToggleHighContrast}
+          aria-label="Toggle High Contrast Mode"
+          title="Toggle High Contrast Mode"
+        >
+          HC
         </button>
       </div>
       
