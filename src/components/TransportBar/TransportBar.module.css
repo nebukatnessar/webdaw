@@ -152,3 +152,9 @@
   -moz-appearance: textfield;
   appearance: textfield;
 }
+
+/* Theme toggle button styles */
+.themeBtn {
+  font-size: 14px;
+  padding: 0 8px;
+}
