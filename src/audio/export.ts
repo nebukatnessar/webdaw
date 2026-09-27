@@ -1,6 +1,7 @@
 import { getBuffer } from './engine';
 import { encodeWav } from './wav';
 import type { Track, Project } from '../types/daw';
+import { getDefaultCompressorSettings, updateCompressorNode } from './compressor';
 
 export interface ExportOptions {
   sampleRate?: number;
@@ -10,6 +11,21 @@ export interface ExportOptions {
 export interface ExportResult {
   blob: Blob;
   duration: number;
+}
+
+/**
+ * Helper to create and configure compressor node for export
+ */
+function createCompressorForExport(
+  ctx: OfflineAudioContext,
+  compressorSettings?: { enabled: boolean; threshold: number; ratio: number; attack: number; release: number; knee: number }
+): DynamicsCompressorNode | null {
+  const settings = compressorSettings || getDefaultCompressorSettings();
+  if (!settings.enabled) return null;
+  
+  const compressor = ctx.createDynamicsCompressor();
+  updateCompressorNode(compressor, settings);
+  return compressor;
 }
 
 export async function exportTrackAsWAV(
@@ -40,6 +56,10 @@ export async function exportTrackAsWAV(
   gainNode.gain.value = track.volume;
   gainNode.connect(offlineCtx.destination);
   
+  // Create compressor if enabled
+  const compressorSettings = track.compressor || getDefaultCompressorSettings();
+  const compressor = createCompressorForExport(offlineCtx, compressorSettings);
+  
   for (const clip of sortedClips) {
     if (!clip.audioBufferId) continue;
     const buffer = getBuffer(clip.audioBufferId);
@@ -51,8 +71,17 @@ export async function exportTrackAsWAV(
     
     const panner = offlineCtx.createStereoPanner();
     panner.pan.value = track.pan;
+    
+    // Connect: source -> panner -> compressor (if enabled) -> gain -> destination
     source.connect(panner);
-    panner.connect(gainNode);
+    
+    if (compressor) {
+      panner.connect(compressor);
+      compressor.connect(gainNode);
+    } else {
+      panner.connect(gainNode);
+    }
+    
     source.start(clipStartSecs);
   }
   
@@ -105,7 +134,18 @@ export async function exportProjectAsWAV(
     
     const panner = offlineCtx.createStereoPanner();
     panner.pan.value = track.pan;
-    panner.connect(trackGain);
+    
+    // Create compressor if enabled
+    const compressorSettings = track.compressor || getDefaultCompressorSettings();
+    const compressor = createCompressorForExport(offlineCtx, compressorSettings);
+    
+    // Connect: panner -> compressor (if enabled) -> trackGain -> masterGain
+    if (compressor) {
+      panner.connect(compressor);
+      compressor.connect(trackGain);
+    } else {
+      panner.connect(trackGain);
+    }
     
     const sortedClips = [...track.clips].sort((a, b) => a.startBeat - b.startBeat);
     for (const clip of sortedClips) {
