@@ -55,11 +55,11 @@ export function getMasterLevels(): { left: number; right: number } {
   return { left: rmsFromAnalyser(masterAnalyserL), right: rmsFromAnalyser(masterAnalyserR) };
 }
 
-// One persistent gain+pan+compressor node per track, reused across the whole session
+// One persistent gain+pan node per track, reused across the whole session
 // instead of being recreated (and re-snapshotted) every time playback
 // starts. This is what lets volume/pan/mute/solo changes take effect live,
 // on whatever is currently playing, rather than only on the next Play.
-const trackNodes = new Map<string, { gainNode: GainNode; panner: StereoPannerNode; compressor?: DynamicsCompressorNode }>();
+const trackNodes = new Map<string, { gainNode: GainNode; panner: StereoPannerNode }>();
 
 // Per-track analyser tapping each track's post-fader, post-pan signal (the
 // same point its audio reaches the master bus), for a per-track VU meter in
@@ -67,26 +67,12 @@ const trackNodes = new Map<string, { gainNode: GainNode; panner: StereoPannerNod
 // a metering tap, not part of the audio path itself.
 const trackAnalysers = new Map<string, AnalyserNode>();
 
-function getOrCreateTrackNodes(ctx: AudioContext, trackId: string, compressorSettings?: { enabled: boolean; threshold: number; ratio: number; attack: number; release: number; knee: number }) {
+function getOrCreateTrackNodes(ctx: AudioContext, trackId: string) {
   let nodes = trackNodes.get(trackId);
   if (!nodes) {
     const gainNode = ctx.createGain();
     const panner = ctx.createStereoPanner();
-    
-    // Create compressor node if settings are provided and enabled
-    let compressorNode: DynamicsCompressorNode | undefined;
-    if (compressorSettings?.enabled) {
-      compressorNode = ctx.createDynamicsCompressor();
-      updateCompressorNode(compressorNode, compressorSettings);
-    }
-    
-    // Connect the nodes: gain -> compressor (if enabled) -> panner -> master
-    if (compressorNode) {
-      gainNode.connect(compressorNode);
-      compressorNode.connect(panner);
-    } else {
-      gainNode.connect(panner);
-    }
+    gainNode.connect(panner);
     panner.connect(getMasterGainNode(ctx));
 
     const analyser = ctx.createAnalyser();
@@ -94,7 +80,7 @@ function getOrCreateTrackNodes(ctx: AudioContext, trackId: string, compressorSet
     panner.connect(analyser);
     trackAnalysers.set(trackId, analyser);
 
-    nodes = { gainNode, panner, compressor: compressorNode };
+    nodes = { gainNode, panner };
     trackNodes.set(trackId, nodes);
   }
   return nodes;
@@ -116,6 +102,7 @@ export function getTrackLevel(trackId: string): number {
  * live - this runs on every track change (not just at playback start), so
  * dragging a slider or toggling mute/solo while something is already
  * playing takes effect immediately. Solo silences every non-soloed track.
+ * Also updates compressor settings for each track.
  */
 export function updateLiveTrackParams(tracks: Track[]): void {
   const ctx = getAudioContext();
@@ -125,26 +112,36 @@ export function updateLiveTrackParams(tracks: Track[]): void {
     if (!currentIds.has(id)) {
       nodes.gainNode.disconnect();
       nodes.panner.disconnect();
-      if (nodes.compressor) {
-        nodes.compressor.disconnect();
-      }
       trackNodes.delete(id);
       trackAnalysers.get(id)?.disconnect();
       trackAnalysers.delete(id);
+      // Clean up compressor node for removed tracks
+      cleanupCompressorNode(id);
     }
   }
 
   const hasSoloed = tracks.some((t) => t.soloed);
   for (const track of tracks) {
     const compressorSettings = track.compressor || getDefaultCompressorSettings();
-    const { gainNode, panner, compressor } = getOrCreateTrackNodes(ctx, track.id, compressorSettings);
+    const { gainNode, panner } = getOrCreateTrackNodes(ctx, track.id);
     const audible = hasSoloed ? track.soloed : !track.muted;
     gainNode.gain.value = audible ? track.volume : 0;
     panner.pan.value = track.pan;
     
-    // Update compressor settings if they exist
-    if (compressor && compressorSettings.enabled) {
-      updateCompressorNode(compressor, compressorSettings);
+    // Get or create compressor node and update its settings
+    if (compressorSettings.enabled) {
+      const compressorNode = getOrCreateCompressorNode(ctx, track.id, compressorSettings);
+      // Insert compressor between gain and panner
+      gainNode.disconnect();
+      gainNode.connect(compressorNode);
+      compressorNode.connect(panner);
+    } else {
+      // If compressor is disabled, make sure it's not in the chain
+      const existingCompressor = getCompressorNode(track.id);
+      if (existingCompressor) {
+        gainNode.disconnect();
+        gainNode.connect(panner);
+      }
     }
   }
 }
@@ -207,7 +204,7 @@ export function schedulePlayback(
   updateLiveTrackParams(tracks);
 
   for (const track of tracks) {
-    const { gainNode } = getOrCreateTrackNodes(ctx, track.id, track.compressor);
+    const { gainNode } = getOrCreateTrackNodes(ctx, track.id);
 
     for (const clip of track.clips) {
       if (!clip.audioBufferId) continue;
