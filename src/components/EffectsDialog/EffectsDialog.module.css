@@ -1,0 +1,110 @@
+.dialog {
+  position: fixed;
+  background: var(--bg-1);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+  z-index: 1000;
+  overflow: hidden;
+  min-width: 400px;
+  min-height: 300px;
+  resize: none;
+}
+
+.title {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 12px;
+  background: var(--bg-2);
+  border-bottom: 1px solid var(--border);
+  font-size: 12px;
+  font-weight: 500;
+  cursor: move;
+  user-select: none;
+}
+
+.closeBtn {
+  background: transparent;
+  border: none;
+  color: var(--text-dim);
+  cursor: pointer;
+  font-size: 14px;
+  padding: 0 4px;
+}
+
+.closeBtn:hover {
+  color: var(--danger);
+}
+
+.content {
+  display: flex;
+  height: calc(100% - 30px);
+  overflow: hidden;
+}
+
+.leftPane {
+  width: 150px;
+  flex-shrink: 0;
+  padding: 12px;
+  background: var(--bg-1);
+  border-right: 1px solid var(--border);
+  overflow-y: auto;
+}
+
+.leftPane h3 {
+  margin: 0 0 12px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text);
+}
+
+.effectsList {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.effectItem {
+  padding: 6px 8px;
+  font-size: 11px;
+  color: var(--text-dim);
+  border-radius: 2px;
+  cursor: pointer;
+}
+
+.effectItem:hover {
+  background: var(--bg-2);
+  color: var(--text);
+}
+
+.rightPane {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 12px;
+  background: var(--bg-2);
+  overflow: hidden;
+}
+
+.placeholder {
+  color: var(--text-dim);
+  font-size: 11px;
+  text-align: center;
+}
+
+.resizeHandle {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  width: 10px;
+  height: 10px;
+  background: var(--border);
+  cursor: nwse-resize;
+  z-index: 10;
+}
+
+.resizeHandle:hover {
+  background: var(--accent);
+}
