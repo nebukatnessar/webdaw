@@ -6,6 +6,7 @@ import { useTransportStore } from '../../store/transportStore';
 import * as engine from '../../audio/engine';
 import { BEATS_PER_BAR } from '../../constants';
 import TrackMeter from './TrackMeter';
+import EffectsDialog from '../EffectsDialog/EffectsDialog';
 
 interface Props {
   scrollRef: RefObject<HTMLDivElement | null>;
@@ -22,6 +23,11 @@ export default function TrackHeaderList({ scrollRef, onScroll }: Props) {
   const { tracks, updateTrack, removeTrack } = useTrackStore();
   const createTracksForClips = useTrackStore((s) => s.createTracksForClips);
   const [isDropOver, setIsDropOver] = useState(false);
+  
+  // State for EffectsDialog
+  const [openDialogTrackId, setOpenDialogTrackId] = useState<string | null>(null);
+  const [dialogPosition, setDialogPosition] = useState({ x: 100, y: 100 });
+  const [dialogSize, setDialogSize] = useState({ width: 500, height: 400 });
 
   const handleDragOver = (e: React.DragEvent) => {
     if (!e.dataTransfer.types.includes('Files')) return;
@@ -60,6 +66,29 @@ export default function TrackHeaderList({ scrollRef, onScroll }: Props) {
       .then((clipData) => createTracksForClips(clipData, startBeat))
       .catch(() => undefined);
   };
+
+  // Toggle EffectsDialog for a track
+  const toggleEffectsDialog = (trackId: string) => {
+    setOpenDialogTrackId((prev) => (prev === trackId ? null : trackId));
+  };
+
+  // Close dialog
+  const closeEffectsDialog = () => {
+    setOpenDialogTrackId(null);
+  };
+
+  // Handle dialog position change
+  const handlePositionChange = (x: number, y: number) => {
+    setDialogPosition({ x, y });
+  };
+
+  // Handle dialog size change
+  const handleSizeChange = (width: number, height: number) => {
+    setDialogSize({ width, height });
+  };
+
+  // Get the track for the open dialog
+  const openDialogTrack = tracks.find((t) => t.id === openDialogTrackId);
 
   return (
     <div
@@ -100,6 +129,13 @@ export default function TrackHeaderList({ scrollRef, onScroll }: Props) {
                     title="Solo"
                   >
                     S
+                  </button>
+                  <button
+                    className={styles.iconBtn}
+                    onClick={() => toggleEffectsDialog(track.id)}
+                    title="Track Effects"
+                  >
+                    FX
                   </button>
                   <button
                     className={styles.removeBtn}
@@ -148,6 +184,17 @@ export default function TrackHeaderList({ scrollRef, onScroll }: Props) {
           {isDropOver ? 'Release to add tracks' : '+ Drop audio files'}
         </div>
       </div>
+      {openDialogTrack && (
+        <EffectsDialog
+          trackId={openDialogTrack.id}
+          trackName={openDialogTrack.name}
+          onClose={closeEffectsDialog}
+          position={dialogPosition}
+          onPositionChange={handlePositionChange}
+          size={dialogSize}
+          onSizeChange={handleSizeChange}
+        />
+      )}
     </div>
   );
 }
