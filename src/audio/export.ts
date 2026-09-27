@@ -14,13 +14,12 @@ export interface ExportResult {
 }
 
 /**
- * Helper to create and configure compressor node for export
+ * Create and configure a compressor node for export
  */
-function createCompressorForExport(
+function createAndConfigureCompressor(
   ctx: OfflineAudioContext,
-  compressorSettings?: { enabled: boolean; threshold: number; ratio: number; attack: number; release: number; knee: number }
+  settings: { enabled: boolean; threshold: number; ratio: number; attack: number; release: number; knee: number }
 ): DynamicsCompressorNode | null {
-  const settings = compressorSettings || getDefaultCompressorSettings();
   if (!settings.enabled) return null;
   
   const compressor = ctx.createDynamicsCompressor();
@@ -58,7 +57,7 @@ export async function exportTrackAsWAV(
   
   // Create compressor if enabled
   const compressorSettings = track.compressor || getDefaultCompressorSettings();
-  const compressor = createCompressorForExport(offlineCtx, compressorSettings);
+  const compressor = createAndConfigureCompressor(offlineCtx, compressorSettings);
   
   for (const clip of sortedClips) {
     if (!clip.audioBufferId) continue;
@@ -137,7 +136,7 @@ export async function exportProjectAsWAV(
     
     // Create compressor if enabled
     const compressorSettings = track.compressor || getDefaultCompressorSettings();
-    const compressor = createCompressorForExport(offlineCtx, compressorSettings);
+    const compressor = createAndConfigureCompressor(offlineCtx, compressorSettings);
     
     // Connect: panner -> compressor (if enabled) -> trackGain -> masterGain
     if (compressor) {
