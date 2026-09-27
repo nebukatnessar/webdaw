@@ -78,14 +78,18 @@
   color: var(--text);
 }
 
+.effectItem.selected {
+  background: var(--accent);
+  color: white;
+}
+
 .rightPane {
   flex: 1;
   display: flex;
-  align-items: center;
-  justify-content: center;
+  flex-direction: column;
   padding: 12px;
   background: var(--bg-2);
-  overflow: hidden;
+  overflow-y: auto;
 }
 
 .placeholder {
