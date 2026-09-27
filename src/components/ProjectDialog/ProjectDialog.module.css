@@ -13,7 +13,7 @@
 }
 
 .dialog {
-  background: #1a1a2e;
+  background: var(--bg-1);
   border-radius: 12px;
   padding: 24px;
   width: 90%;
@@ -21,20 +21,20 @@
   max-height: 80vh;
   overflow-y: auto;
   box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
-  color: #fff;
+  color: var(--text);
 }
 
 .title {
   margin: 0 0 20px;
   font-size: 1.5rem;
   font-weight: 600;
-  color: #fff;
+  color: var(--text);
   text-align: center;
 }
 
 .error {
-  background: #e06c75;
-  color: white;
+  background: var(--danger);
+  color: #fff;
   padding: 10px 14px;
   border-radius: 6px;
   margin-bottom: 16px;
@@ -49,28 +49,28 @@
   display: block;
   margin-bottom: 6px;
   font-size: 0.9rem;
-  color: #888;
+  color: var(--text-dim);
   font-weight: 500;
 }
 
 .input {
   width: 100%;
   padding: 10px 12px;
-  background: #16213e;
-  border: 1px solid #0f3460;
+  background: var(--bg-2);
+  border: 1px solid var(--border);
   border-radius: 6px;
-  color: #fff;
+  color: var(--text);
   font-size: 1rem;
   outline: none;
   transition: border-color 0.2s;
 }
 
 .input:focus {
-  border-color: #538bf5;
+  border-color: var(--accent);
 }
 
 .input::placeholder {
-  color: #555;
+  color: var(--text-dim);
 }
 
 .section {
@@ -79,14 +79,14 @@
 
 .sectionTitle {
   font-size: 0.9rem;
-  color: #888;
+  color: var(--text-dim);
   margin-bottom: 10px;
   text-transform: uppercase;
   letter-spacing: 0.5px;
 }
 
 .empty {
-  color: #555;
+  color: var(--text-dim);
   font-style: italic;
   text-align: center;
   padding: 10px;
@@ -103,7 +103,7 @@
   justify-content: space-between;
   align-items: center;
   padding: 10px 12px;
-  background: #16213e;
+  background: var(--bg-2);
   border-radius: 6px;
   margin-bottom: 8px;
   cursor: pointer;
@@ -111,12 +111,12 @@
 }
 
 .projectItem:hover {
-  background: #0f3460;
+  background: var(--bg-hover);
 }
 
 .projectItem.selected {
-  background: #0f3460;
-  border: 1px solid #538bf5;
+  background: var(--bg-hover);
+  border: 1px solid var(--accent);
 }
 
 .projectName {
@@ -125,14 +125,14 @@
 
 .projectDate {
   font-size: 0.8rem;
-  color: #666;
+  color: var(--text-dim);
 }
 
 .divider {
   display: flex;
   align-items: center;
   margin: 12px 0;
-  color: #555;
+  color: var(--text-dim);
   font-size: 0.85rem;
 }
 
@@ -141,12 +141,12 @@
   content: '';
   flex: 1;
   height: 1px;
-  background: #333;
+  background: var(--border);
   margin: 0 10px;
 }
 
 .helpText {
-  color: #666;
+  color: var(--text-dim);
   font-size: 0.85rem;
   margin-bottom: 10px;
 }
@@ -154,35 +154,35 @@
 .importBtn {
   display: inline-block;
   padding: 10px 20px;
-  background: #16213e;
-  border: 1px solid #0f3460;
+  background: var(--bg-2);
+  border: 1px solid var(--border);
   border-radius: 6px;
-  color: #fff;
+  color: var(--text);
   cursor: pointer;
   transition: background 0.2s;
 }
 
 .importBtn:hover {
-  background: #0f3460;
+  background: var(--bg-hover);
 }
 
 .folderPicker {
   margin-top: 16px;
   padding: 12px;
-  background: #16213e;
+  background: var(--bg-2);
   border-radius: 6px;
   text-align: center;
 }
 
 .folderPicker p {
   margin: 0 0 10px;
-  color: #888;
+  color: var(--text-dim);
   font-size: 0.9rem;
 }
 
 .openFolderBtn {
   padding: 10px 20px;
-  background: #538bf5;
+  background: var(--accent);
   border: none;
   border-radius: 6px;
   color: #fff;
@@ -192,11 +192,11 @@
 }
 
 .openFolderBtn:hover {
-  background: #6aa6f8;
+  filter: brightness(1.1);
 }
 
 .openFolderBtn:disabled {
-  background: #333;
+  background: var(--bg-3);
   cursor: not-allowed;
 }
 
@@ -206,28 +206,28 @@
   gap: 10px;
   margin-top: 20px;
   padding-top: 16px;
-  border-top: 1px solid #333;
+  border-top: 1px solid var(--border);
 }
 
 .cancelBtn {
   padding: 10px 20px;
   background: transparent;
-  border: 1px solid #555;
+  border: 1px solid var(--border);
   border-radius: 6px;
-  color: #888;
+  color: var(--text-dim);
   cursor: pointer;
   transition: all 0.2s;
 }
 
 .cancelBtn:hover:not(:disabled) {
-  background: #333;
-  color: #fff;
+  background: var(--bg-hover);
+  color: var(--text);
 }
 
 .saveBtn,
 .createBtn {
   padding: 10px 20px;
-  background: #538bf5;
+  background: var(--accent);
   border: none;
   border-radius: 6px;
   color: #fff;
@@ -238,7 +238,7 @@
 
 .saveBtn:hover:not(:disabled),
 .createBtn:hover:not(:disabled) {
-  background: #6aa6f8;
+  filter: brightness(1.1);
 }
 
 .saveBtn:disabled,
