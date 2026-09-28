@@ -234,11 +234,13 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
         }
         await saveProjectWithAudio(tracks, serialized, state.fileStructure.folderHandle);
 
-        // Update metadata
+        // Update metadata (preserve createdAt if project exists)
+        const existingProjects = getProjectMetadataList();
+        const existingProject = existingProjects.find((p) => p.id === projectId);
         saveProjectMetadata({
           id: projectId,
           name: projectName,
-          createdAt: now,
+          createdAt: existingProject ? existingProject.createdAt : now,
           updatedAt: now,
         });
         
@@ -270,11 +272,13 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
         // Save project to the project subfolder
         const structure = await saveProjectWithAudio(tracks, serialized, projectFolderHandle);
 
-        // Update metadata
+        // Update metadata (preserve createdAt if project exists)
+        const existingProjects2 = getProjectMetadataList();
+        const existingProject2 = existingProjects2.find((p) => p.id === projectId);
         saveProjectMetadata({
           id: projectId,
           name: projectName,
-          createdAt: now,
+          createdAt: existingProject2 ? existingProject2.createdAt : now,
           updatedAt: now,
         });
 
@@ -321,11 +325,13 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
       // Save project to the project subfolder (not the base directory directly)
       const structure = await saveProjectWithAudio(tracks, serialized, projectFolderHandle);
 
-      // Update metadata
+      // Update metadata (preserve createdAt if project exists)
+      const existingProjects3 = getProjectMetadataList();
+      const existingProject3 = existingProjects3.find((p) => p.id === projectId);
       saveProjectMetadata({
         id: projectId,
         name: projectName,
-        createdAt: now,
+        createdAt: existingProject3 ? existingProject3.createdAt : now,
         updatedAt: now,
       });
       
@@ -369,13 +375,20 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
     await loadAllAudioFiles(folderHandle, tracks);
     
     const now = Date.now();
-    const projectId = `project-${now}`;
+    const projectName = serialized.name;
     
-    // Save metadata
+    // Check if there's already a project with this name in metadata
+    const existingProjects = getProjectMetadataList();
+    const existingProject = existingProjects.find((p) => p.name === projectName);
+    
+    const projectId = existingProject ? existingProject.id : `project-${now}`;
+    const createdAt = existingProject ? existingProject.createdAt : now;
+    
+    // Save/update metadata
     saveProjectMetadata({
       id: projectId,
-      name: serialized.name,
-      createdAt: now,
+      name: projectName,
+      createdAt,
       updatedAt: now,
     });
     
@@ -385,7 +398,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
     
     set({
       currentProjectId: projectId,
-      currentProjectName: serialized.name,
+      currentProjectName: projectName,
       fileStructure: {
         folderHandle,
         projectFileHandle,
@@ -488,18 +501,26 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
     // and let users re-import audio files
     
     const now = Date.now();
-    const projectId = `imported-${now}`;
+    const projectName = serialized.name;
     
+    // Check if there's already a project with this name in metadata
+    const existingProjects = getProjectMetadataList();
+    const existingProject = existingProjects.find((p) => p.name === projectName);
+    
+    const projectId = existingProject ? existingProject.id : `imported-${now}`;
+    const createdAt = existingProject ? existingProject.createdAt : now;
+    
+    // Save/update metadata
     saveProjectMetadata({
       id: projectId,
-      name: serialized.name,
-      createdAt: now,
+      name: projectName,
+      createdAt,
       updatedAt: now,
     });
     
     set({
       currentProjectId: projectId,
-      currentProjectName: serialized.name,
+      currentProjectName: projectName,
       fileStructure: null, // No file system handle for imported projects
     });
     
