@@ -38,6 +38,7 @@ export interface SerializedTrack {
   compressor?: { enabled: boolean; threshold: number; ratio: number; attack: number; release: number; knee: number; makeupGain: number };
   gate?: { enabled: boolean; threshold: number; attack: number; hold: number; release: number; range: number };
   eq?: { enabled: boolean; lowGain: number; midGain: number; highGain: number; lowFreq: number; midFreq: number; highFreq: number; lowQ: number; midQ: number; highQ: number };
+  reverb?: { enabled: boolean; roomType: string; decay: number; preDelay: number; wet: number; dry: number; damping: number };
 }
 
 // Clip with file reference instead of AudioBuffer

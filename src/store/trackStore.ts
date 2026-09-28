@@ -3,6 +3,7 @@ import type { Track } from '../types/daw';
 import { getDefaultCompressorSettings } from '../audio/compressor';
 import { getDefaultGateSettings } from '../audio/gate';
 import { getDefaultEQSettings } from '../audio/eq';
+import { getDefaultReverbSettings } from '../audio/reverb';
 
 const TRACK_COLORS = ['#e06c75', '#61afef', '#98c379', '#e5c07b', '#c678dd', '#56b6c2'];
 
@@ -49,6 +50,7 @@ export const useTrackStore = create<TrackState>((set) => ({
         compressor: getDefaultCompressorSettings(),
         gate: getDefaultGateSettings(),
         eq: getDefaultEQSettings(),
+        reverb: getDefaultReverbSettings(),
       };
       return { tracks: [...state.tracks, newTrack] };
     }),
@@ -138,6 +140,7 @@ export const useTrackStore = create<TrackState>((set) => ({
           compressor: getDefaultCompressorSettings(),
           gate: getDefaultGateSettings(),
           eq: getDefaultEQSettings(),
+          reverb: getDefaultReverbSettings(),
         };
       });
       return { tracks: [...state.tracks, ...newTracks] };

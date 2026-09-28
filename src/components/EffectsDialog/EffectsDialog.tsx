@@ -3,6 +3,7 @@ import styles from './EffectsDialog.module.css';
 import CompressorControls from './CompressorControls';
 import GateControls from './GateControls';
 import EQControls from './EQControls';
+import ReverbControls from './ReverbControls';
 
 interface EffectsDialogProps {
   trackId: string;
@@ -135,9 +136,7 @@ export default function EffectsDialog({
           {selectedEffect === 'Compressor' && <CompressorControls trackId={trackId} />}
           {selectedEffect === 'Gate' && <GateControls trackId={trackId} />}
           {selectedEffect === 'Equalizer' && <EQControls trackId={trackId} />}
-          {selectedEffect !== 'Compressor' && selectedEffect !== 'Gate' && selectedEffect !== 'Equalizer' && (
-            <span className={styles.placeholder}>Controls for {selectedEffect} coming soon</span>
-          )}
+          {selectedEffect === 'Reverb' && <ReverbControls trackId={trackId} />}
         </div>
       </div>
       <div className={styles.resizeHandle} onMouseDown={handleResizeMouseDown} />

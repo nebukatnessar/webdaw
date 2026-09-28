@@ -17,6 +17,11 @@ import {
   cleanupEQNode,
   getDefaultEQSettings,
 } from './eq';
+import {
+  getOrCreateReverbNode,
+  cleanupReverbNode,
+  getDefaultReverbSettings,
+} from './reverb';
 
 let audioCtx: AudioContext | null = null;
 const bufferMap = new Map<string, AudioBuffer>();
@@ -111,7 +116,7 @@ export function getTrackLevel(trackId: string): number {
  * live - this runs on every track change (not just at playback start), so
  * dragging a slider or toggling mute/solo while something is already
  * playing takes effect immediately. Solo silences every non-soloed track.
- * Also updates compressor, gate, and EQ settings for each track.
+ * Also updates compressor, gate, EQ, and reverb settings for each track.
  */
 export function updateLiveTrackParams(tracks: Track[]): void {
   const ctx = getAudioContext();
@@ -124,10 +129,11 @@ export function updateLiveTrackParams(tracks: Track[]): void {
       trackNodes.delete(id);
       trackAnalysers.get(id)?.disconnect();
       trackAnalysers.delete(id);
-      // Clean up compressor, gate, and EQ nodes for removed tracks
+      // Clean up compressor, gate, EQ, and reverb nodes for removed tracks
       cleanupCompressorNode(id);
       cleanupGateNode(id);
       cleanupEQNode(id);
+      cleanupReverbNode(id);
     }
   }
 
@@ -136,6 +142,7 @@ export function updateLiveTrackParams(tracks: Track[]): void {
     const compressorSettings = track.compressor || getDefaultCompressorSettings();
     const gateSettings = track.gate || getDefaultGateSettings();
     const eqSettings = track.eq || getDefaultEQSettings();
+    const reverbSettings = track.reverb || getDefaultReverbSettings();
     const { gainNode, panner } = getOrCreateTrackNodes(ctx, track.id);
     const audible = hasSoloed ? track.soloed : !track.muted;
     gainNode.gain.value = audible ? track.volume : 0;
@@ -144,8 +151,8 @@ export function updateLiveTrackParams(tracks: Track[]): void {
     // Disconnect existing connections to rebuild the effect chain
     gainNode.disconnect();
 
-    // Build the effect chain: gain -> gate -> eq -> compressor -> panner
-    // This follows the standard signal processing order
+    // Build the effect chain: gain -> gate -> eq -> compressor -> reverb -> panner
+    // Standard signal processing order: dynamics -> EQ -> time-based effects
     let currentNode: AudioNode = gainNode;
 
     // Add gate if enabled
@@ -167,6 +174,13 @@ export function updateLiveTrackParams(tracks: Track[]): void {
       const compressor = getOrCreateCompressorNode(ctx, track.id, compressorSettings);
       currentNode.connect(compressor.input);
       currentNode = compressor.output;
+    }
+
+    // Add reverb if enabled
+    if (reverbSettings.enabled) {
+      const reverb = getOrCreateReverbNode(ctx, track.id, reverbSettings);
+      currentNode.connect(reverb.input);
+      currentNode = reverb.output;
     }
 
     // Connect to panner (final destination)

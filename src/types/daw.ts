@@ -43,6 +43,18 @@ export interface EQSettings {
   highQ: number;     // Quality factor for high band (0.1 to 5)
 }
 
+export type ReverbRoomType = 'Room' | 'Hall' | 'Cathedral';
+
+export interface ReverbSettings {
+  enabled: boolean;
+  roomType: ReverbRoomType;
+  decay: number;      // Decay time multiplier (0.1 to 2.0)
+  preDelay: number;   // Pre-delay in ms (0 to 500)
+  wet: number;        // Wet mix level (0 to 1)
+  dry: number;        // Dry mix level (0 to 1)
+  damping: number;    // High-frequency damping (0 to 1, where 1 = full damping)
+}
+
 
 export interface Track {
   id: string;
@@ -57,6 +69,7 @@ export interface Track {
   compressor?: CompressorSettings;
   gate?: GateSettings;
   eq?: EQSettings;
+  reverb?: ReverbSettings;
 }
 
 
