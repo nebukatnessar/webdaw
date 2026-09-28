@@ -6,13 +6,11 @@ import {
   getOrCreateCompressorNode,
   cleanupCompressorNode,
   getDefaultCompressorSettings,
-  getCompressorNode,
 } from './compressor';
 import {
   getOrCreateGateNode,
   cleanupGateNode,
   getDefaultGateSettings,
-  getGateNode,
 } from './gate';
 
 let audioCtx: AudioContext | null = null;
