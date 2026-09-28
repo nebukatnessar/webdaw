@@ -15,6 +15,7 @@ const COMPRESSOR_PARAMS = {
   attack: { min: 0.001, max: 1, step: 0.001, label: 'Attack (s)' },
   release: { min: 0.001, max: 1, step: 0.001, label: 'Release (s)' },
   knee: { min: 0, max: 40, step: 1, label: 'Knee (dB)' },
+  makeupGain: { min: 0, max: 20, step: 1, label: 'Makeup Gain (dB)' },
 } as const;
 
 export default function CompressorControls({ trackId }: CompressorControlsProps) {
