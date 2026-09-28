@@ -8,6 +8,7 @@ const DEFAULT_COMPRESSOR_SETTINGS: CompressorSettings = {
   attack: 0.01, // seconds
   release: 0.1, // seconds
   knee: 5, // dB
+  makeupGain: 0, // dB
 };
 
 // Map to store compressor nodes per track
@@ -47,6 +48,7 @@ export function updateCompressorNode(
   node.attack.value = settings.attack;
   node.release.value = settings.release;
   node.knee.value = settings.knee;
+  node.makeupGain.value = settings.makeupGain;
 }
 
 /**
