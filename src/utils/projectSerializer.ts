@@ -8,6 +8,7 @@ import type {
   ProjectFileStructure,
 } from '../types/project';
 import { getDefaultCompressorSettings } from '../audio/compressor';
+import { getDefaultGateSettings } from '../audio/gate';
 
 // Project version for forward compatibility
 const PROJECT_VERSION = '1.0';
@@ -96,6 +97,7 @@ export function createProjectFromState(
       pan: track.pan,
       color: track.color,
       compressor: track.compressor || getDefaultCompressorSettings(),
+      gate: track.gate || getDefaultGateSettings(),
       clips: track.clips.map((clip) => ({
         id: clip.id,
         trackId: clip.trackId,
@@ -124,6 +126,7 @@ export function convertToTracks(serializedTracks: SerializedTrack[]): Track[] {
     pan: track.pan,
     color: track.color,
     compressor: track.compressor || getDefaultCompressorSettings(),
+    gate: track.gate || getDefaultGateSettings(),
     clips: track.clips.map((clip) => ({
       id: clip.id,
       trackId: clip.trackId,
