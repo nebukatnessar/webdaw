@@ -11,8 +11,20 @@ const DEFAULT_COMPRESSOR_SETTINGS: CompressorSettings = {
   makeupGain: 0, // dB
 };
 
-// Map to store compressor nodes per track
-const compressorNodes = new Map<string, DynamicsCompressorNode>();
+interface CompressorChain {
+  compressor: DynamicsCompressorNode;
+  makeupGain: GainNode;
+}
+
+// Map to store compressor chains per track
+const compressorNodes = new Map<string, CompressorChain>();
+
+function createCompressorChain(ctx: BaseAudioContext): CompressorChain {
+  const compressor = ctx.createDynamicsCompressor();
+  const makeupGain = ctx.createGain();
+  compressor.connect(makeupGain);
+  return { compressor, makeupGain };
+}
 
 /**
  * Get or create a compressor node for a track
@@ -22,33 +34,42 @@ export function getOrCreateCompressorNode(
   ctx: AudioContext,
   trackId: string,
   settings: CompressorSettings = DEFAULT_COMPRESSOR_SETTINGS
-): DynamicsCompressorNode {
-  let node = compressorNodes.get(trackId);
+): GainNode {
+  let chain = compressorNodes.get(trackId);
   
-  if (!node) {
-    node = ctx.createDynamicsCompressor();
-    compressorNodes.set(trackId, node);
+  if (!chain) {
+    chain = createCompressorChain(ctx);
+    compressorNodes.set(trackId, chain);
   }
   
   // Update node parameters with current settings
-  updateCompressorNode(node, settings);
+  updateCompressorNode(chain, settings);
   
-  return node;
+  return chain.makeupGain;
 }
 
 /**
  * Update a compressor node with new settings
  */
 export function updateCompressorNode(
-  node: DynamicsCompressorNode,
+  chain: CompressorChain,
   settings: CompressorSettings
 ): void {
-  node.threshold.value = settings.threshold;
-  node.ratio.value = settings.ratio;
-  node.attack.value = settings.attack;
-  node.release.value = settings.release;
-  node.knee.value = settings.knee;
-  node.makeupGain.value = settings.makeupGain;
+  chain.compressor.threshold.value = settings.threshold;
+  chain.compressor.ratio.value = settings.ratio;
+  chain.compressor.attack.value = settings.attack;
+  chain.compressor.release.value = settings.release;
+  chain.compressor.knee.value = settings.knee;
+  chain.makeupGain.gain.value = 10 ** (settings.makeupGain / 20);
+}
+
+export function createAndConfigureCompressor(
+  ctx: BaseAudioContext,
+  settings: CompressorSettings,
+): GainNode {
+  const chain = createCompressorChain(ctx);
+  updateCompressorNode(chain, settings);
+  return chain.makeupGain;
 }
 
 /**
@@ -62,9 +83,10 @@ export function getDefaultCompressorSettings(): CompressorSettings {
  * Clean up compressor node for a track
  */
 export function cleanupCompressorNode(trackId: string): void {
-  const node = compressorNodes.get(trackId);
-  if (node) {
-    node.disconnect();
+  const chain = compressorNodes.get(trackId);
+  if (chain) {
+    chain.compressor.disconnect();
+    chain.makeupGain.disconnect();
     compressorNodes.delete(trackId);
   }
 }
@@ -73,8 +95,9 @@ export function cleanupCompressorNode(trackId: string): void {
  * Clean up all compressor nodes
  */
 export function cleanupAllCompressorNodes(): void {
-  for (const [, node] of compressorNodes) {
-    node.disconnect();
+  for (const [, chain] of compressorNodes) {
+    chain.compressor.disconnect();
+    chain.makeupGain.disconnect();
   }
   compressorNodes.clear();
 }
@@ -82,6 +105,6 @@ export function cleanupAllCompressorNodes(): void {
 /**
  * Get the compressor node for a track (without creating if it doesn't exist)
  */
-export function getCompressorNode(trackId: string): DynamicsCompressorNode | undefined {
-  return compressorNodes.get(trackId);
+export function getCompressorNode(trackId: string): GainNode | undefined {
+  return compressorNodes.get(trackId)?.makeupGain;
 }

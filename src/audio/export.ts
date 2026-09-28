@@ -1,7 +1,7 @@
 import { getBuffer } from './engine';
 import { encodeWav } from './wav';
-import type { Track, Project } from '../types/daw';
-import { getDefaultCompressorSettings, updateCompressorNode } from './compressor';
+import type { CompressorSettings, Track, Project } from '../types/daw';
+import { createAndConfigureCompressor, getDefaultCompressorSettings } from './compressor';
 
 export interface ExportOptions {
   sampleRate?: number;
@@ -13,18 +13,12 @@ export interface ExportResult {
   duration: number;
 }
 
-/**
- * Create and configure a compressor node for export
- */
-function createAndConfigureCompressor(
+function createExportCompressor(
   ctx: OfflineAudioContext,
-  settings: { enabled: boolean; threshold: number; ratio: number; attack: number; release: number; knee: number; makeupGain: number }
-): DynamicsCompressorNode | null {
+  settings: CompressorSettings,
+): GainNode | null {
   if (!settings.enabled) return null;
-  
-  const compressor = ctx.createDynamicsCompressor();
-  updateCompressorNode(compressor, settings);
-  return compressor;
+  return createAndConfigureCompressor(ctx, settings);
 }
 
 export async function exportTrackAsWAV(
@@ -57,7 +51,7 @@ export async function exportTrackAsWAV(
   
   // Create compressor if enabled
   const compressorSettings = track.compressor || getDefaultCompressorSettings();
-  const compressor = createAndConfigureCompressor(offlineCtx, compressorSettings);
+  const compressor = createExportCompressor(offlineCtx, compressorSettings);
   
   for (const clip of sortedClips) {
     if (!clip.audioBufferId) continue;
