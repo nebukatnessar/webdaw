@@ -71,7 +71,7 @@ export function cleanupCompressorNode(trackId: string): void {
  * Clean up all compressor nodes
  */
 export function cleanupAllCompressorNodes(): void {
-  for (const [trackId, node] of compressorNodes) {
+  for (const [, node] of compressorNodes) {
     node.disconnect();
   }
   compressorNodes.clear();

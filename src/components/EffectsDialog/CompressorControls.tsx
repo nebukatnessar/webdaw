@@ -7,6 +7,8 @@ interface CompressorControlsProps {
   trackId: string;
 }
 
+type NumericCompressorKey = Exclude<keyof CompressorSettings, 'enabled'>;
+
 const COMPRESSOR_PARAMS = {
   threshold: { min: -60, max: 0, step: 1, label: 'Threshold (dB)' },
   ratio: { min: 1, max: 20, step: 0.1, label: 'Ratio' },
@@ -30,7 +32,7 @@ export default function CompressorControls({ trackId }: CompressorControlsProps)
     }
   }, [track?.compressor]);
 
-  const handleChange = (param: keyof CompressorSettings, value: number) => {
+  const handleChange = (param: NumericCompressorKey, value: number) => {
     const newSettings = { ...settings, [param]: value };
     setSettings(newSettings);
     updateTrack(trackId, { compressor: newSettings });
@@ -67,12 +69,12 @@ export default function CompressorControls({ trackId }: CompressorControlsProps)
             min={config.min}
             max={config.max}
             step={config.step}
-            value={settings[param as keyof CompressorSettings]}
-            onChange={(e) => handleChange(param as keyof CompressorSettings, Number(e.target.value))}
+            value={settings[param as NumericCompressorKey]}
+            onChange={(e) => handleChange(param as NumericCompressorKey, Number(e.target.value))}
             style={{ width: '100%' }}
           />
           <span style={{ fontSize: '11px', color: '#888' }}>
-            {settings[param as keyof CompressorSettings]}
+            {settings[param as NumericCompressorKey]}
           </span>
         </div>
       ))}
