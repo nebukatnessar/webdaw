@@ -11,9 +11,11 @@ const DEFAULT_COMPRESSOR_SETTINGS: CompressorSettings = {
   makeupGain: 0, // dB
 };
 
-interface CompressorChain {
+export interface CompressorChain {
   compressor: DynamicsCompressorNode;
   makeupGain: GainNode;
+  input: DynamicsCompressorNode;
+  output: GainNode;
 }
 
 // Map to store compressor chains per track
@@ -23,7 +25,7 @@ function createCompressorChain(ctx: BaseAudioContext): CompressorChain {
   const compressor = ctx.createDynamicsCompressor();
   const makeupGain = ctx.createGain();
   compressor.connect(makeupGain);
-  return { compressor, makeupGain };
+  return { compressor, makeupGain, input: compressor, output: makeupGain };
 }
 
 /**
@@ -34,7 +36,7 @@ export function getOrCreateCompressorNode(
   ctx: AudioContext,
   trackId: string,
   settings: CompressorSettings = DEFAULT_COMPRESSOR_SETTINGS
-): GainNode {
+): CompressorChain {
   let chain = compressorNodes.get(trackId);
   
   if (!chain) {
@@ -45,7 +47,7 @@ export function getOrCreateCompressorNode(
   // Update node parameters with current settings
   updateCompressorNode(chain, settings);
   
-  return chain.makeupGain;
+  return chain;
 }
 
 /**
@@ -66,10 +68,10 @@ export function updateCompressorNode(
 export function createAndConfigureCompressor(
   ctx: BaseAudioContext,
   settings: CompressorSettings,
-): GainNode {
+): CompressorChain {
   const chain = createCompressorChain(ctx);
   updateCompressorNode(chain, settings);
-  return chain.makeupGain;
+  return chain;
 }
 
 /**
