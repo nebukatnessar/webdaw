@@ -16,6 +16,7 @@ export interface CompressorSettings {
   attack: number;   // seconds (0 to 1)
   release: number;  // seconds (0 to 1)
   knee: number;     // dB (0 to 40)
+  makeupGain: number; // dB (0 to 20, default 0)
 }
 
 export interface Track {
