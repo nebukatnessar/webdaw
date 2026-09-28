@@ -142,16 +142,16 @@ export function updateLiveTrackParams(tracks: Track[]): void {
 
     // Add gate if enabled
     if (gateSettings.enabled) {
-      const gateNode = getOrCreateGateNode(ctx, track.id, gateSettings);
-      currentNode.connect(gateNode);
-      currentNode = gateNode;
+      const gate = getOrCreateGateNode(ctx, track.id, gateSettings);
+      currentNode.connect(gate.input);
+      currentNode = gate.output;
     }
 
     // Add compressor if enabled
     if (compressorSettings.enabled) {
-      const compressorNode = getOrCreateCompressorNode(ctx, track.id, compressorSettings);
-      currentNode.connect(compressorNode);
-      currentNode = compressorNode;
+      const compressor = getOrCreateCompressorNode(ctx, track.id, compressorSettings);
+      currentNode.connect(compressor.input);
+      currentNode = compressor.output;
     }
 
     // Connect to panner (final destination)

@@ -17,7 +17,7 @@ export interface ExportResult {
 function createExportCompressor(
   ctx: OfflineAudioContext,
   settings: CompressorSettings,
-): GainNode | null {
+): ReturnType<typeof createAndConfigureCompressor> | null {
   if (!settings.enabled) return null;
   return createAndConfigureCompressor(ctx, settings);
 }
@@ -25,7 +25,7 @@ function createExportCompressor(
 function createExportGate(
   ctx: OfflineAudioContext,
   settings: GateSettings,
-): GainNode | null {
+): ReturnType<typeof createAndConfigureGate> | null {
   if (!settings.enabled) return null;
   return createAndConfigureGate(ctx, settings);
 }
@@ -84,13 +84,13 @@ export async function exportTrackAsWAV(
     let currentNode: AudioNode = panner;
     
     if (gate) {
-      currentNode.connect(gate);
-      currentNode = gate;
+      currentNode.connect(gate.input);
+      currentNode = gate.output;
     }
     
     if (compressor) {
-      currentNode.connect(compressor);
-      currentNode = compressor;
+      currentNode.connect(compressor.input);
+      currentNode = compressor.output;
     }
     
     currentNode.connect(gainNode);
@@ -154,19 +154,19 @@ export async function exportProjectAsWAV(
     
     // Create compressor if enabled
     const compressorSettings = track.compressor || getDefaultCompressorSettings();
-    const compressor = createAndConfigureCompressor(offlineCtx, compressorSettings);
+    const compressor = createExportCompressor(offlineCtx, compressorSettings);
     
     // Connect: panner -> gate (if enabled) -> compressor (if enabled) -> trackGain -> masterGain
     let currentNode: AudioNode = panner;
     
     if (gate) {
-      currentNode.connect(gate);
-      currentNode = gate;
+      currentNode.connect(gate.input);
+      currentNode = gate.output;
     }
     
     if (compressor) {
-      currentNode.connect(compressor);
-      currentNode = compressor;
+      currentNode.connect(compressor.input);
+      currentNode = compressor.output;
     }
     
     currentNode.connect(trackGain);
