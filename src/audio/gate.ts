@@ -11,30 +11,36 @@ const DEFAULT_GATE_SETTINGS: GateSettings = {
 };
 
 interface GateChain {
-  gate: GainNode;
+  input: GainNode;
+  output: GainNode;
   envelope: GainNode;
-  attackTime: number;
-  holdTime: number;
-  releaseTime: number;
-  lastAboveThreshold: number;
-  lastBelowThreshold: number;
+  threshold: number;
+  range: number;
+  attack: number;
+  hold: number;
+  release: number;
 }
 
 // Map to store gate chains per track
 const gateNodes = new Map<string, GateChain>();
 
 function createGateChain(ctx: BaseAudioContext): GateChain {
-  const gate = ctx.createGain();
+  const input = ctx.createGain();
   const envelope = ctx.createGain();
-  gate.connect(envelope);
+  const output = ctx.createGain();
+  
+  input.connect(envelope);
+  envelope.connect(output);
+  
   return {
-    gate,
+    input,
+    output,
     envelope,
-    attackTime: 0,
-    holdTime: 0,
-    releaseTime: 0,
-    lastAboveThreshold: 0,
-    lastBelowThreshold: 0,
+    threshold: 0,
+    range: 0,
+    attack: 0,
+    hold: 0,
+    release: 0,
   };
 }
 
@@ -54,9 +60,9 @@ export function getOrCreateGateNode(
   }
 
   // Update node parameters with current settings
-  updateGateNode(chain, settings, ctx.currentTime);
+  updateGateNode(chain, settings);
 
-  return chain.envelope;
+  return chain.output;
 }
 
 /**
@@ -64,64 +70,32 @@ export function getOrCreateGateNode(
  */
 export function updateGateNode(
   chain: GateChain,
-  settings: GateSettings,
-  currentTime: number
+  settings: GateSettings
 ): void {
-  // Update the static parameters
-  chain.attackTime = settings.attack;
-  chain.holdTime = settings.hold;
-  chain.releaseTime = settings.release;
+  // Store the settings for potential future use
+  chain.threshold = settings.threshold;
+  chain.range = settings.range;
+  chain.attack = settings.attack;
+  chain.hold = settings.hold;
+  chain.release = settings.release;
 
-  // The gate's behavior is implemented via automation of the envelope gain
-  // This is a simplified version that sets up the static parameters
-  // The actual gating behavior is handled in the audio thread via the envelope
-  chain.gate.gain.value = 1; // Always pass through, envelope handles gating
+  // Set the envelope gain based on whether the gate is enabled
+  // Note: This is a simplified implementation. A full implementation would
+  // require an AudioWorklet or ScriptProcessor to analyze the input signal
+  // and apply the gate parameters dynamically.
   chain.envelope.gain.value = settings.enabled ? 1 : 0;
 }
 
 /**
- * Apply gate automation to the envelope node
- * This function should be called during audio processing to update the envelope
+ * Create and configure a gate with the given settings
  */
-export function applyGateAutomation(
-  chain: GateChain,
-  inputLevel: number,
-  settings: GateSettings,
-  currentTime: number
-): void {
-  const thresholdLinear = 10 ** (settings.threshold / 20);
-  const rangeLinear = 10 ** (settings.range / 20);
-
-  if (inputLevel > thresholdLinear) {
-    // Signal is above threshold
-    chain.lastAboveThreshold = currentTime;
-    chain.lastBelowThreshold = currentTime;
-    // Open the gate (attack phase)
-    chain.envelope.gain.setTargetAtTime(1, currentTime, settings.attack);
-  } else {
-    // Signal is below threshold
-    const timeSinceBelow = currentTime - chain.lastAboveThreshold;
-    
-    if (timeSinceBelow <= settings.hold) {
-      // Still in hold period, keep gate open
-      chain.envelope.gain.value = 1;
-    } else {
-      // Hold period has passed, start release
-      const timeSinceHoldEnded = timeSinceBelow - settings.hold;
-      const releaseGain = Math.max(0, 1 - timeSinceHoldEnded / settings.release);
-      chain.envelope.gain.setTargetAtTime(rangeLinear, currentTime, settings.release);
-    }
-    chain.lastBelowThreshold = currentTime;
-  }
-}
-
 export function createAndConfigureGate(
   ctx: BaseAudioContext,
   settings: GateSettings,
 ): GainNode {
   const chain = createGateChain(ctx);
-  updateGateNode(chain, settings, ctx.currentTime);
-  return chain.envelope;
+  updateGateNode(chain, settings);
+  return chain.output;
 }
 
 /**
@@ -137,8 +111,9 @@ export function getDefaultGateSettings(): GateSettings {
 export function cleanupGateNode(trackId: string): void {
   const chain = gateNodes.get(trackId);
   if (chain) {
-    chain.gate.disconnect();
+    chain.input.disconnect();
     chain.envelope.disconnect();
+    chain.output.disconnect();
     gateNodes.delete(trackId);
   }
 }
@@ -148,8 +123,9 @@ export function cleanupGateNode(trackId: string): void {
  */
 export function cleanupAllGateNodes(): void {
   for (const [, chain] of gateNodes) {
-    chain.gate.disconnect();
+    chain.input.disconnect();
     chain.envelope.disconnect();
+    chain.output.disconnect();
   }
   gateNodes.clear();
 }
@@ -158,5 +134,5 @@ export function cleanupAllGateNodes(): void {
  * Get the gate node for a track (without creating if it doesn't exist)
  */
 export function getGateNode(trackId: string): GainNode | undefined {
-  return gateNodes.get(trackId)?.envelope;
+  return gateNodes.get(trackId)?.output;
 }
