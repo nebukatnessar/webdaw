@@ -9,6 +9,7 @@ export interface Clip {
   audioFile?: string | null; // File path for saved projects
 }
 
+
 export interface CompressorSettings {
   enabled: boolean;
   threshold: number; // dB (-60 to 0)
@@ -19,6 +20,7 @@ export interface CompressorSettings {
   makeupGain: number; // dB (0 to 20, default 0)
 }
 
+
 export interface GateSettings {
   enabled: boolean;
   threshold: number; // dB (-60 to 0)
@@ -27,6 +29,20 @@ export interface GateSettings {
   release: number;  // seconds (0 to 1)
   range: number;    // dB (0 to -60, where 0 = no attenuation, -60 = full mute)
 }
+
+export interface EQSettings {
+  enabled: boolean;
+  lowGain: number;   // dB (-20 to +20)
+  midGain: number;   // dB (-20 to +20)
+  highGain: number;  // dB (-20 to +20)
+  lowFreq: number;   // Hz (20-2000)
+  midFreq: number;   // Hz (200-8000)
+  highFreq: number;  // Hz (1000-20000)
+  lowQ: number;      // Quality factor for low band (0.1 to 5)
+  midQ: number;      // Quality factor for mid band (0.1 to 5)
+  highQ: number;     // Quality factor for high band (0.1 to 5)
+}
+
 
 export interface Track {
   id: string;
@@ -40,7 +56,9 @@ export interface Track {
   clips: Clip[];
   compressor?: CompressorSettings;
   gate?: GateSettings;
+  eq?: EQSettings;
 }
+
 
 export interface Project {
   id: string;

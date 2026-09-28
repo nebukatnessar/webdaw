@@ -12,6 +12,11 @@ import {
   cleanupGateNode,
   getDefaultGateSettings,
 } from './gate';
+import {
+  getOrCreateEQNode,
+  cleanupEQNode,
+  getDefaultEQSettings,
+} from './eq';
 
 let audioCtx: AudioContext | null = null;
 const bufferMap = new Map<string, AudioBuffer>();
@@ -106,7 +111,7 @@ export function getTrackLevel(trackId: string): number {
  * live - this runs on every track change (not just at playback start), so
  * dragging a slider or toggling mute/solo while something is already
  * playing takes effect immediately. Solo silences every non-soloed track.
- * Also updates compressor and gate settings for each track.
+ * Also updates compressor, gate, and EQ settings for each track.
  */
 export function updateLiveTrackParams(tracks: Track[]): void {
   const ctx = getAudioContext();
@@ -119,9 +124,10 @@ export function updateLiveTrackParams(tracks: Track[]): void {
       trackNodes.delete(id);
       trackAnalysers.get(id)?.disconnect();
       trackAnalysers.delete(id);
-      // Clean up compressor and gate nodes for removed tracks
+      // Clean up compressor, gate, and EQ nodes for removed tracks
       cleanupCompressorNode(id);
       cleanupGateNode(id);
+      cleanupEQNode(id);
     }
   }
 
@@ -129,6 +135,7 @@ export function updateLiveTrackParams(tracks: Track[]): void {
   for (const track of tracks) {
     const compressorSettings = track.compressor || getDefaultCompressorSettings();
     const gateSettings = track.gate || getDefaultGateSettings();
+    const eqSettings = track.eq || getDefaultEQSettings();
     const { gainNode, panner } = getOrCreateTrackNodes(ctx, track.id);
     const audible = hasSoloed ? track.soloed : !track.muted;
     gainNode.gain.value = audible ? track.volume : 0;
@@ -137,7 +144,8 @@ export function updateLiveTrackParams(tracks: Track[]): void {
     // Disconnect existing connections to rebuild the effect chain
     gainNode.disconnect();
 
-    // Build the effect chain: gain -> gate -> compressor -> panner
+    // Build the effect chain: gain -> gate -> eq -> compressor -> panner
+    // This follows the standard signal processing order
     let currentNode: AudioNode = gainNode;
 
     // Add gate if enabled
@@ -145,6 +153,13 @@ export function updateLiveTrackParams(tracks: Track[]): void {
       const gate = getOrCreateGateNode(ctx, track.id, gateSettings);
       currentNode.connect(gate.input);
       currentNode = gate.output;
+    }
+
+    // Add EQ if enabled
+    if (eqSettings.enabled) {
+      const eq = getOrCreateEQNode(ctx, track.id, eqSettings);
+      currentNode.connect(eq.input);
+      currentNode = eq.output;
     }
 
     // Add compressor if enabled
