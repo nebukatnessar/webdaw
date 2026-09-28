@@ -18,7 +18,7 @@ export interface ExportResult {
  */
 function createAndConfigureCompressor(
   ctx: OfflineAudioContext,
-  settings: { enabled: boolean; threshold: number; ratio: number; attack: number; release: number; knee: number }
+  settings: { enabled: boolean; threshold: number; ratio: number; attack: number; release: number; knee: number; makeupGain: number }
 ): DynamicsCompressorNode | null {
   if (!settings.enabled) return null;
   
