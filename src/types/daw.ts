@@ -19,6 +19,15 @@ export interface CompressorSettings {
   makeupGain: number; // dB (0 to 20, default 0)
 }
 
+export interface GateSettings {
+  enabled: boolean;
+  threshold: number; // dB (-60 to 0)
+  attack: number;   // seconds (0 to 1)
+  hold: number;     // seconds (0 to 1)
+  release: number;  // seconds (0 to 1)
+  range: number;    // dB (0 to -60, where 0 = no attenuation, -60 = full mute)
+}
+
 export interface Track {
   id: string;
   name: string;
@@ -30,6 +39,7 @@ export interface Track {
   color: string;
   clips: Clip[];
   compressor?: CompressorSettings;
+  gate?: GateSettings;
 }
 
 export interface Project {

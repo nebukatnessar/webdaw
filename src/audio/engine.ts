@@ -6,8 +6,12 @@ import {
   getOrCreateCompressorNode,
   cleanupCompressorNode,
   getDefaultCompressorSettings,
-  getCompressorNode,
 } from './compressor';
+import {
+  getOrCreateGateNode,
+  cleanupGateNode,
+  getDefaultGateSettings,
+} from './gate';
 
 let audioCtx: AudioContext | null = null;
 const bufferMap = new Map<string, AudioBuffer>();
@@ -102,7 +106,7 @@ export function getTrackLevel(trackId: string): number {
  * live - this runs on every track change (not just at playback start), so
  * dragging a slider or toggling mute/solo while something is already
  * playing takes effect immediately. Solo silences every non-soloed track.
- * Also updates compressor settings for each track.
+ * Also updates compressor and gate settings for each track.
  */
 export function updateLiveTrackParams(tracks: Track[]): void {
   const ctx = getAudioContext();
@@ -115,34 +119,43 @@ export function updateLiveTrackParams(tracks: Track[]): void {
       trackNodes.delete(id);
       trackAnalysers.get(id)?.disconnect();
       trackAnalysers.delete(id);
-      // Clean up compressor node for removed tracks
+      // Clean up compressor and gate nodes for removed tracks
       cleanupCompressorNode(id);
+      cleanupGateNode(id);
     }
   }
 
   const hasSoloed = tracks.some((t) => t.soloed);
   for (const track of tracks) {
     const compressorSettings = track.compressor || getDefaultCompressorSettings();
+    const gateSettings = track.gate || getDefaultGateSettings();
     const { gainNode, panner } = getOrCreateTrackNodes(ctx, track.id);
     const audible = hasSoloed ? track.soloed : !track.muted;
     gainNode.gain.value = audible ? track.volume : 0;
     panner.pan.value = track.pan;
-    
-    // Get or create compressor node and update its settings
+
+    // Disconnect existing connections to rebuild the effect chain
+    gainNode.disconnect();
+
+    // Build the effect chain: gain -> gate -> compressor -> panner
+    let currentNode: AudioNode = gainNode;
+
+    // Add gate if enabled
+    if (gateSettings.enabled) {
+      const gateNode = getOrCreateGateNode(ctx, track.id, gateSettings);
+      currentNode.connect(gateNode);
+      currentNode = gateNode;
+    }
+
+    // Add compressor if enabled
     if (compressorSettings.enabled) {
       const compressorNode = getOrCreateCompressorNode(ctx, track.id, compressorSettings);
-      // Insert compressor between gain and panner
-      gainNode.disconnect();
-      gainNode.connect(compressorNode);
-      compressorNode.connect(panner);
-    } else {
-      // If compressor is disabled, make sure it's not in the chain
-      const existingCompressor = getCompressorNode(track.id);
-      if (existingCompressor) {
-        gainNode.disconnect();
-        gainNode.connect(panner);
-      }
+      currentNode.connect(compressorNode);
+      currentNode = compressorNode;
     }
+
+    // Connect to panner (final destination)
+    currentNode.connect(panner);
   }
 }
 
@@ -251,7 +264,7 @@ export function stopAllSources(): void {
 // currently timed against. Lives here rather than as component-local state
 // so any part of the UI (the transport's own playback loop, or the ruler
 // when the user relocates the playhead) can jump the playhead to a new
-// position without needing to stop playback to do it.
+// position without needing to stop playback to it.
 let anchorCtxTime = 0;
 let anchorBeats = 0;
 

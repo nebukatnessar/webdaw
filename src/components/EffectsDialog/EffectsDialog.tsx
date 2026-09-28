@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
 import styles from './EffectsDialog.module.css';
 import CompressorControls from './CompressorControls';
+import GateControls from './GateControls';
 
 interface EffectsDialogProps {
   trackId: string;
@@ -131,7 +132,8 @@ export default function EffectsDialog({
         </div>
         <div className={styles.rightPane}>
           {selectedEffect === 'Compressor' && <CompressorControls trackId={trackId} />}
-          {selectedEffect !== 'Compressor' && (
+          {selectedEffect === 'Gate' && <GateControls trackId={trackId} />}
+          {selectedEffect !== 'Compressor' && selectedEffect !== 'Gate' && (
             <span className={styles.placeholder}>Controls for {selectedEffect} coming soon</span>
           )}
         </div>
