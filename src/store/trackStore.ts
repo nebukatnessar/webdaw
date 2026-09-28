@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import type { Track } from '../types/daw';
+import { getDefaultCompressorSettings } from '../audio/compressor';
 
 const TRACK_COLORS = ['#e06c75', '#61afef', '#98c379', '#e5c07b', '#c678dd', '#56b6c2'];
 
@@ -43,6 +44,7 @@ export const useTrackStore = create<TrackState>((set) => ({
         pan: 0,
         color,
         clips: [],
+        compressor: getDefaultCompressorSettings(),
       };
       return { tracks: [...state.tracks, newTrack] };
     }),
@@ -129,6 +131,7 @@ export const useTrackStore = create<TrackState>((set) => ({
               audioBufferId: data.audioBufferId,
             },
           ],
+          compressor: getDefaultCompressorSettings(),
         };
       });
       return { tracks: [...state.tracks, ...newTracks] };

@@ -9,6 +9,15 @@ export interface Clip {
   audioFile?: string | null; // File path for saved projects
 }
 
+export interface CompressorSettings {
+  enabled: boolean;
+  threshold: number; // dB (-60 to 0)
+  ratio: number;    // 1 to 20
+  attack: number;   // seconds (0 to 1)
+  release: number;  // seconds (0 to 1)
+  knee: number;     // dB (0 to 40)
+}
+
 export interface Track {
   id: string;
   name: string;
@@ -19,6 +28,7 @@ export interface Track {
   pan: number;    // -1 to 1
   color: string;
   clips: Clip[];
+  compressor?: CompressorSettings;
 }
 
 export interface Project {

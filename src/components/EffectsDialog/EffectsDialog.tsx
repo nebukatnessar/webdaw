@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
 import styles from './EffectsDialog.module.css';
+import CompressorControls from './CompressorControls';
 
 interface EffectsDialogProps {
   trackId: string;
@@ -16,6 +17,8 @@ const EFFECTS_LIST = ['Gate', 'Equalizer', 'Compressor', 'Reverb'];
 const MIN_WIDTH = 400;
 const MIN_HEIGHT = 300;
 
+type EffectType = 'Gate' | 'Equalizer' | 'Compressor' | 'Reverb';
+
 export default function EffectsDialog({
   trackId,
   trackName,
@@ -30,6 +33,7 @@ export default function EffectsDialog({
   const [isResizing, setIsResizing] = useState(false);
   const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
   const [resizeStart, setResizeStart] = useState({ width: 0, height: 0, x: 0, y: 0 });
+  const [selectedEffect, setSelectedEffect] = useState<EffectType | null>('Compressor');
 
   // Handle dragging
   const handleMouseDown = (e: React.MouseEvent) => {
@@ -115,14 +119,21 @@ export default function EffectsDialog({
           <h3>Effects</h3>
           <ul className={styles.effectsList}>
             {EFFECTS_LIST.map((effect) => (
-              <li key={effect} className={styles.effectItem}>
+              <li
+                key={effect}
+                className={`${styles.effectItem} ${selectedEffect === effect ? styles.selected : ''}`}
+                onClick={() => setSelectedEffect(effect as EffectType)}
+              >
                 {effect}
               </li>
             ))}
           </ul>
         </div>
         <div className={styles.rightPane}>
-          <span className={styles.placeholder}>Controls coming soon</span>
+          {selectedEffect === 'Compressor' && <CompressorControls trackId={trackId} />}
+          {selectedEffect !== 'Compressor' && (
+            <span className={styles.placeholder}>Controls for {selectedEffect} coming soon</span>
+          )}
         </div>
       </div>
       <div className={styles.resizeHandle} onMouseDown={handleResizeMouseDown} />

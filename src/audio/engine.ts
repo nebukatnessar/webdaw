@@ -2,6 +2,12 @@ import type { Track } from '../types/daw';
 import { cacheBuffer } from './bufferCache';
 import { useTrackStore } from '../store/trackStore';
 import { rmsFromAnalyser } from './meterUtils';
+import {
+  getOrCreateCompressorNode,
+  cleanupCompressorNode,
+  getDefaultCompressorSettings,
+  getCompressorNode,
+} from './compressor';
 
 let audioCtx: AudioContext | null = null;
 const bufferMap = new Map<string, AudioBuffer>();
@@ -96,6 +102,7 @@ export function getTrackLevel(trackId: string): number {
  * live - this runs on every track change (not just at playback start), so
  * dragging a slider or toggling mute/solo while something is already
  * playing takes effect immediately. Solo silences every non-soloed track.
+ * Also updates compressor settings for each track.
  */
 export function updateLiveTrackParams(tracks: Track[]): void {
   const ctx = getAudioContext();
@@ -108,15 +115,34 @@ export function updateLiveTrackParams(tracks: Track[]): void {
       trackNodes.delete(id);
       trackAnalysers.get(id)?.disconnect();
       trackAnalysers.delete(id);
+      // Clean up compressor node for removed tracks
+      cleanupCompressorNode(id);
     }
   }
 
   const hasSoloed = tracks.some((t) => t.soloed);
   for (const track of tracks) {
+    const compressorSettings = track.compressor || getDefaultCompressorSettings();
     const { gainNode, panner } = getOrCreateTrackNodes(ctx, track.id);
     const audible = hasSoloed ? track.soloed : !track.muted;
     gainNode.gain.value = audible ? track.volume : 0;
     panner.pan.value = track.pan;
+    
+    // Get or create compressor node and update its settings
+    if (compressorSettings.enabled) {
+      const compressorNode = getOrCreateCompressorNode(ctx, track.id, compressorSettings);
+      // Insert compressor between gain and panner
+      gainNode.disconnect();
+      gainNode.connect(compressorNode);
+      compressorNode.connect(panner);
+    } else {
+      // If compressor is disabled, make sure it's not in the chain
+      const existingCompressor = getCompressorNode(track.id);
+      if (existingCompressor) {
+        gainNode.disconnect();
+        gainNode.connect(panner);
+      }
+    }
   }
 }
 
