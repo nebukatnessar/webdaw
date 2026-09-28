@@ -36,6 +36,7 @@ export interface SerializedTrack {
   color: string;
   clips: SerializedClip[];
   compressor?: { enabled: boolean; threshold: number; ratio: number; attack: number; release: number; knee: number; makeupGain: number };
+  gate?: { enabled: boolean; threshold: number; attack: number; hold: number; release: number; range: number };
 }
 
 // Clip with file reference instead of AudioBuffer
