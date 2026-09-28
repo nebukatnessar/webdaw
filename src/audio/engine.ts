@@ -4,9 +4,9 @@ import { useTrackStore } from '../store/trackStore';
 import { rmsFromAnalyser } from './meterUtils';
 import {
   getOrCreateCompressorNode,
-  updateCompressorNode,
   cleanupCompressorNode,
   getDefaultCompressorSettings,
+  getCompressorNode,
 } from './compressor';
 
 let audioCtx: AudioContext | null = null;
