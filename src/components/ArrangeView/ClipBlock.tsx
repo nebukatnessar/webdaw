@@ -21,6 +21,8 @@ export default function ClipBlock({ clip }: Props) {
   
   // State for trimming
   const [isTrimming, setIsTrimming] = useState(false);
+  const [isTrimmingLeft, setIsTrimmingLeft] = useState(false);
+  const [isTrimmingRight, setIsTrimmingRight] = useState(false);
   const [trimStartBeat, setTrimStartBeat] = useState(clip.startBeat);
   const [trimBufferOffsetBeats, setTrimBufferOffsetBeats] = useState(clip.bufferOffsetBeats ?? 0);
   const [trimDurationBeats, setTrimDurationBeats] = useState(clip.durationBeats);
@@ -49,11 +51,13 @@ export default function ClipBlock({ clip }: Props) {
   }
 
   // Handle pointer down on trim handles
-  const handleTrimStart = (e: React.PointerEvent<HTMLDivElement>, isLeftHandle: boolean) => {
+  const handleTrimStartLeft = (e: React.PointerEvent<HTMLDivElement>) => {
     if (!clip.audioBufferId) return;
     
-    const clipRect = e.currentTarget.parentElement?.getBoundingClientRect();
-    if (!clipRect) return;
+    const clipElement = e.currentTarget.parentElement;
+    if (!clipElement) return;
+    
+    const clipRect = clipElement.getBoundingClientRect();
     
     // Store initial state
     dragStartRef.current = {
@@ -64,14 +68,49 @@ export default function ClipBlock({ clip }: Props) {
     };
     
     setIsTrimming(true);
+    setIsTrimmingLeft(true);
+    setIsTrimmingRight(false);
     
-    // Capture pointer events
-    (e.currentTarget.parentElement as HTMLElement).setPointerCapture(e.pointerId);
+    // Capture pointer events on the clip element
+    (clipElement as HTMLElement).setPointerCapture(e.pointerId);
     
     // Initialize trim state
     setTrimStartBeat(clip.startBeat);
     setTrimBufferOffsetBeats(clip.bufferOffsetBeats ?? 0);
     setTrimDurationBeats(clip.durationBeats);
+    
+    e.stopPropagation();
+  };
+
+  const handleTrimStartRight = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (!clip.audioBufferId) return;
+    
+    const clipElement = e.currentTarget.parentElement;
+    if (!clipElement) return;
+    
+    const clipRect = clipElement.getBoundingClientRect();
+    
+    // Store initial state
+    dragStartRef.current = {
+      x: e.clientX,
+      startBeat: clip.startBeat,
+      bufferOffsetBeats: clip.bufferOffsetBeats ?? 0,
+      durationBeats: clip.durationBeats,
+    };
+    
+    setIsTrimming(true);
+    setIsTrimmingLeft(false);
+    setIsTrimmingRight(true);
+    
+    // Capture pointer events on the clip element
+    (clipElement as HTMLElement).setPointerCapture(e.pointerId);
+    
+    // Initialize trim state
+    setTrimStartBeat(clip.startBeat);
+    setTrimBufferOffsetBeats(clip.bufferOffsetBeats ?? 0);
+    setTrimDurationBeats(clip.durationBeats);
+    
+    e.stopPropagation();
   };
 
   // Handle pointer move during trim
@@ -84,41 +123,35 @@ export default function ClipBlock({ clip }: Props) {
     const bufferDurationBeats = getBufferDurationBeats();
     const initialState = dragStartRef.current;
     
-    // Calculate new values based on which handle is being dragged
-    // We need to determine which handle based on the cursor position relative to the clip
-    const clipRect = e.currentTarget.getBoundingClientRect();
-    const handleWidth = 6; // Width of the trim handle
-    const isLeftHandle = e.clientX - clipRect.left < handleWidth;
-    const isRightHandle = e.clientX - clipRect.right > -handleWidth;
-    
-    if (isLeftHandle) {
+    if (isTrimmingLeft) {
       // Dragging left handle
-      const newStartBeat = initialState.startBeat + deltaBeats;
       const newBufferOffset = initialState.bufferOffsetBeats + deltaBeats;
+      const newStartBeat = initialState.startBeat + deltaBeats;
       const newDuration = initialState.durationBeats - deltaBeats;
       
       // Clamp buffer offset to >= 0
       const clampedBufferOffset = Math.max(0, newBufferOffset);
-      // Adjust startBeat to maintain the relationship: startBeat + bufferOffset should be constant during left trim
-      const startBeatAdjustment = newBufferOffset - clampedBufferOffset;
-      const clampedStartBeat = newStartBeat - startBeatAdjustment;
+      
+      // If buffer offset is clamped, adjust startBeat to maintain the clip's visual position
+      const bufferOffsetDelta = newBufferOffset - clampedBufferOffset;
+      const clampedStartBeat = newStartBeat - bufferOffsetDelta;
       
       // Clamp duration to minimum
       const clampedDuration = Math.max(MIN_CLIP_BEATS, newDuration);
       
-      // If we hit the minimum duration, adjust the start position
-      const finalStartBeat = clampedDuration === MIN_CLIP_BEATS 
-        ? initialState.startBeat + (initialState.durationBeats - MIN_CLIP_BEATS)
-        : clampedStartBeat;
-      const finalBufferOffset = clampedDuration === MIN_CLIP_BEATS
+      // If we hit the minimum duration, don't allow further shrinking
+      const finalBufferOffset = clampedDuration === MIN_CLIP_BEATS && newDuration < MIN_CLIP_BEATS
         ? initialState.bufferOffsetBeats + (initialState.durationBeats - MIN_CLIP_BEATS)
         : clampedBufferOffset;
-      const finalDuration = clampedDuration;
+      const finalStartBeat = clampedDuration === MIN_CLIP_BEATS && newDuration < MIN_CLIP_BEATS
+        ? initialState.startBeat + (initialState.durationBeats - MIN_CLIP_BEATS)
+        : clampedStartBeat;
+      const finalDuration = Math.max(MIN_CLIP_BEATS, clampedDuration);
       
       setTrimStartBeat(finalStartBeat);
       setTrimBufferOffsetBeats(finalBufferOffset);
       setTrimDurationBeats(finalDuration);
-    } else if (isRightHandle) {
+    } else if (isTrimmingRight) {
       // Dragging right handle
       const newDuration = initialState.durationBeats + deltaBeats;
       
@@ -152,6 +185,8 @@ export default function ClipBlock({ clip }: Props) {
     
     // Reset state
     setIsTrimming(false);
+    setIsTrimmingLeft(false);
+    setIsTrimmingRight(false);
     dragStartRef.current = null;
     
     // Release pointer capture
@@ -194,13 +229,13 @@ export default function ClipBlock({ clip }: Props) {
       {/* Left trim handle */}
       <div
         className={styles.trimHandleL}
-        onPointerDown={(e) => handleTrimStart(e, true)}
+        onPointerDown={handleTrimStartLeft}
       />
       
       {/* Right trim handle */}
       <div
         className={styles.trimHandleR}
-        onPointerDown={(e) => handleTrimStart(e, false)}
+        onPointerDown={handleTrimStartRight}
       />
       
       <span className={styles.name}>{clip.name}</span>
