@@ -111,6 +111,12 @@ function App() {
         e.preventDefault();
         useTrackStore.getState().clearClipSelection();
       }
+
+      // Handle duplicate with Ctrl/Cmd+D
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'd' && !e.shiftKey && !e.altKey) {
+        e.preventDefault();
+        useTrackStore.getState().duplicateSelected();
+      }
     };
 
     window.addEventListener('keydown', handleKeyDown);
