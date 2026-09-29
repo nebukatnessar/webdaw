@@ -25,6 +25,7 @@ export default function ClipBlock({ clip }: Props) {
     e.dataTransfer.setData('text/x-clip-beat-offset', String(offsetPx / pixelsPerBeat));
   };
 
+
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas || !clip.audioBufferId) return;

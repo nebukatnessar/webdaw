@@ -22,6 +22,9 @@ export default function ArrangeView({ scrollRef, onScroll }: Props) {
   const addClip = useTrackStore((s) => s.addClip);
   const moveClip = useTrackStore((s) => s.moveClip);
   const createTracksForClips = useTrackStore((s) => s.createTracksForClips);
+  const selectTrack = useTrackStore((s) => s.selectTrack);
+  const selectedTrackIds = useTrackStore((s) => s.selectedTrackIds);
+  const activeTrackId = useTrackStore((s) => s.activeTrackId);
   const playheadBeats = useTransportStore((s) => s.playheadBeats);
   const isPlaying = useTransportStore((s) => s.isPlaying);
   const isSnapEnabled = useTransportStore((s) => s.isSnapEnabled);
@@ -70,6 +73,20 @@ export default function ArrangeView({ scrollRef, onScroll }: Props) {
       setZoomLevel(newZoom);
     }
   }, [setZoomLevel]);
+
+  // Handle lane click for track selection
+  const handleLaneClick = (e: React.MouseEvent, trackId: string) => {
+    // Ignore clicks on clips (they handle their own logic)
+    if ((e.target as HTMLElement).closest(`.${styles.clip}`)) return;
+    
+    if (e.ctrlKey || e.metaKey) {
+      selectTrack(trackId, 'toggle');
+    } else if (e.shiftKey) {
+      selectTrack(trackId, 'range');
+    } else {
+      selectTrack(trackId, 'replace');
+    }
+  };
 
   const handleBelowDragOver = (e: React.DragEvent) => {
     if (!e.dataTransfer.types.includes('Files')) return;
@@ -239,21 +256,30 @@ export default function ArrangeView({ scrollRef, onScroll }: Props) {
               style={{ left: playheadBeats * pixelsPerBeat }}
             />
 
-            {tracks.map((track, i) => (
-              <div
-                key={track.id}
-                className={`${styles.lane} ${i % 2 === 1 ? styles.laneAlt : ''} ${
-                  dragOverTrackId === track.id ? styles.laneDropTarget : ''
-                }`}
-                onDragOver={(e) => handleDragOver(e, track.id)}
-                onDragLeave={handleDragLeave}
-                onDrop={(e) => handleDrop(e, track.id)}
-              >
-                {track.clips.map((clip) => (
-                  <ClipBlock key={clip.id} clip={clip} />
-                ))}
-              </div>
-            ))}
+            {tracks.map((track, i) => {
+              const isSelected = selectedTrackIds.includes(track.id);
+              const isActive = activeTrackId === track.id;
+              
+              return (
+                <div
+                  key={track.id}
+                  className={`${styles.lane} ${i % 2 === 1 ? styles.laneAlt : ''} ${
+                    dragOverTrackId === track.id ? styles.laneDropTarget : ''
+                  } ${isSelected ? styles.selected : ''} ${isActive ? styles.active : ''}`}
+                  onClick={(e) => handleLaneClick(e, track.id)}
+                  onDragOver={(e) => handleDragOver(e, track.id)}
+                  onDragLeave={handleDragLeave}
+                  onDrop={(e) => handleDrop(e, track.id)}
+                  role="option"
+                  aria-selected={isSelected}
+                  aria-label={`Track ${track.name}`}
+                >
+                  {track.clips.map((clip) => (
+                    <ClipBlock key={clip.id} clip={clip} />
+                  ))}
+                </div>
+              );
+            })}
 
             {tracks.length === 0 && (
               <div

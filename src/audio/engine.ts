@@ -1,4 +1,4 @@
-import type { Track, Clip } from '../types/daw';
+import type { Track } from '../types/daw';
 import { cacheBuffer } from './bufferCache';
 import { useTrackStore } from '../store/trackStore';
 import { rmsFromAnalyser } from './meterUtils';

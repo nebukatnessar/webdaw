@@ -20,7 +20,7 @@ function formatPan(pan: number): string {
 }
 
 export default function TrackHeaderList({ scrollRef, onScroll }: Props) {
-  const { tracks, updateTrack, removeTrack } = useTrackStore();
+  const { tracks, updateTrack, removeTrack, selectedTrackIds, activeTrackId, selectTrack } = useTrackStore();
   const createTracksForClips = useTrackStore((s) => s.createTracksForClips);
   const [isDropOver, setIsDropOver] = useState(false);
   
@@ -67,8 +67,23 @@ export default function TrackHeaderList({ scrollRef, onScroll }: Props) {
       .catch(() => undefined);
   };
 
+  // Handle row click for track selection
+  const handleRowClick = (e: React.MouseEvent, trackId: string) => {
+    // Ignore clicks on buttons (they handle their own logic)
+    if ((e.target as HTMLElement).closest('button')) return;
+    
+    if (e.ctrlKey || e.metaKey) {
+      selectTrack(trackId, 'toggle');
+    } else if (e.shiftKey) {
+      selectTrack(trackId, 'range');
+    } else {
+      selectTrack(trackId, 'replace');
+    }
+  };
+
   // Toggle EffectsDialog for a track
-  const toggleEffectsDialog = (trackId: string) => {
+  const toggleEffectsDialog = (e: React.MouseEvent, trackId: string) => {
+    e.stopPropagation(); // Prevent row click from triggering
     setOpenDialogTrackId((prev) => (prev === trackId ? null : trackId));
   };
 
@@ -98,83 +113,98 @@ export default function TrackHeaderList({ scrollRef, onScroll }: Props) {
       onDrop={handleDrop}
     >
       <div className={styles.rulerSpacer} aria-hidden="true" />
-      <div className={styles.scroll} ref={scrollRef} onScroll={onScroll}>
-        {tracks.map((track) => (
-          <div key={track.id} className={styles.row}>
-            <div className={styles.rowMain}>
-              <div className={styles.rowTop}>
-                <span className={styles.colorSwatch} style={{ background: track.color }} />
-                <span className={styles.name} title={track.name}>
-                  {track.name}
-                </span>
-                <div className={styles.controls}>
-                  <button
-                    className={`${styles.iconBtn} ${track.armed ? styles.armed : ''}`}
-                    onClick={() => updateTrack(track.id, { armed: !track.armed })}
-                    title="Arm for recording"
-                    aria-label={`${track.armed ? 'Disarm' : 'Arm'} ${track.name} for recording`}
-                  >
-                    ⏺
-                  </button>
-                  <button
-                    className={`${styles.iconBtn} ${track.muted ? styles.toggled : ''}`}
-                    onClick={() => updateTrack(track.id, { muted: !track.muted })}
-                    title="Mute"
-                  >
-                    M
-                  </button>
-                  <button
-                    className={`${styles.iconBtn} ${track.soloed ? styles.toggled : ''}`}
-                    onClick={() => updateTrack(track.id, { soloed: !track.soloed })}
-                    title="Solo"
-                  >
-                    S
-                  </button>
-                  <button
-                    className={styles.iconBtn}
-                    onClick={() => toggleEffectsDialog(track.id)}
-                    title="Track Effects"
-                  >
-                    FX
-                  </button>
-                  <button
-                    className={styles.removeBtn}
-                    onClick={() => removeTrack(track.id)}
-                    title="Remove track"
-                  >
-                    ✕
-                  </button>
+      <div className={styles.scroll} ref={scrollRef} onScroll={onScroll} role="listbox" aria-label="Track list">
+        {tracks.map((track) => {
+          const isSelected = selectedTrackIds.includes(track.id);
+          const isActive = activeTrackId === track.id;
+          
+          return (
+            <div
+              key={track.id}
+              className={`${styles.row} ${isSelected ? styles.selected : ''} ${isActive ? styles.active : ''}`}
+              onClick={(e) => handleRowClick(e, track.id)}
+              role="option"
+              aria-selected={isSelected}
+              aria-label={`Track ${track.name}`}
+            >
+              <div className={styles.rowMain}>
+                <div className={styles.rowTop}>
+                  <span className={styles.colorSwatch} style={{ background: track.color }} />
+                  <span className={styles.name} title={track.name}>
+                    {track.name}
+                  </span>
+                  <div className={styles.controls}>
+                    <button
+                      className={`${styles.iconBtn} ${track.armed ? styles.armed : ''}`}
+                      onClick={() => updateTrack(track.id, { armed: !track.armed })}
+                      title="Arm for recording"
+                      aria-label={`${track.armed ? 'Disarm' : 'Arm'} ${track.name} for recording`}
+                    >
+                      ⏺
+                    </button>
+                    <button
+                      className={`${styles.iconBtn} ${track.muted ? styles.toggled : ''}`}
+                      onClick={() => updateTrack(track.id, { muted: !track.muted })}
+                      title="Mute"
+                    >
+                      M
+                    </button>
+                    <button
+                      className={`${styles.iconBtn} ${track.soloed ? styles.toggled : ''}`}
+                      onClick={() => updateTrack(track.id, { soloed: !track.soloed })}
+                      title="Solo"
+                    >
+                      S
+                    </button>
+                    <button
+                      className={styles.iconBtn}
+                      onClick={(e) => toggleEffectsDialog(e, track.id)}
+                      title="Track Effects"
+                    >
+                      FX
+                    </button>
+                    <button
+                      className={styles.removeBtn}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        removeTrack(track.id);
+                      }}
+                      title="Remove track"
+                    >
+                      ✕
+                    </button>
+                  </div>
                 </div>
-              </div>
-              <input
-                type="range"
-                min={0}
-                max={1}
-                step={0.01}
-                value={track.volume}
-                onChange={(e) => updateTrack(track.id, { volume: Number(e.target.value) })}
-                title={`Volume: ${Math.round(track.volume * 100)}%`}
-                className={styles.volume}
-                aria-label={`Volume for ${track.name}`}
-              />
-              <div className={styles.panRow}>
                 <input
                   type="range"
-                  min={-1}
+                  min={0}
                   max={1}
                   step={0.01}
-                  value={track.pan}
-                  onChange={(e) => updateTrack(track.id, { pan: Number(e.target.value) })}
-                  title={`Pan: ${formatPan(track.pan)}`}
-                  className={styles.pan}
-                  aria-label={`Pan for ${track.name}`}
+                  value={track.volume}
+                  onChange={(e) => updateTrack(track.id, { volume: Number(e.target.value) })}
+                  title={`Volume: ${Math.round(track.volume * 100)}%`}
+                  className={styles.volume}
+                  aria-label={`Volume for ${track.name}`}
                 />
-                <span className={styles.panValue}>{formatPan(track.pan)}</span>
+                <div className={styles.panRow}>
+                  <input
+                    type="range"
+                    min={-1}
+                    max={1}
+                    step={0.01}
+                    value={track.pan}
+                    onChange={(e) => updateTrack(track.id, { pan: Number(e.target.value) })}
+                    title={`Pan: ${formatPan(track.pan)}`}
+                    className={styles.pan}
+                    aria-label={`Pan for ${track.name}`}
+                  />
+                  <span className={styles.panValue}>{formatPan(track.pan)}</span>
+                </div>
               </div>
+              <TrackMeter trackId={track.id} trackName={track.name} />
             </div>
-            <TrackMeter trackId={track.id} trackName={track.name} />
-          </div>
-        ))}
+          );
+        })}
         {tracks.length === 0 && (
           <div className={styles.empty}>
             Drop audio files here · or use &ldquo;+ Track&rdquo;

@@ -79,10 +79,30 @@
   height: var(--track-height);
   position: relative;
   border-bottom: 1px solid var(--border);
+  cursor: pointer;
 }
 
 .laneAlt {
   background: rgba(255, 255, 255, 0.018);
+}
+
+/* Track selection states (#151) */
+.lane.selected {
+  background: rgba(97, 175, 239, 0.08);
+}
+
+.laneAlt.selected {
+  background: rgba(97, 175, 239, 0.1);
+}
+
+.lane.active {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+  background: rgba(97, 175, 239, 0.12);
+}
+
+.laneAlt.active {
+  background: rgba(97, 175, 239, 0.14);
 }
 
 .laneDropTarget {
@@ -117,7 +137,7 @@
   height: 52px;
   display: flex;
   align-items: center;
-  padding-left: 14px;
+  justify-content: center;
   font-size: 11px;
   color: var(--text-dim);
   border-top: 1px dashed var(--border);
