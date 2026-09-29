@@ -20,8 +20,12 @@ function formatPan(pan: number): string {
 }
 
 export default function TrackHeaderList({ scrollRef, onScroll }: Props) {
-  const { tracks, updateTrack, removeTrack, selectedTrackIds, activeTrackId, selectTrack } = useTrackStore();
+  const { tracks, updateTrack, selectedTrackIds, activeTrackId, selectTrack } = useTrackStore();
   const createTracksForClips = useTrackStore((s) => s.createTracksForClips);
+  const toggleArmSelected = useTrackStore((s) => s.toggleArmSelected);
+  const toggleMuteSelected = useTrackStore((s) => s.toggleMuteSelected);
+  const toggleSoloSelected = useTrackStore((s) => s.toggleSoloSelected);
+  const deleteSelectedTracks = useTrackStore((s) => s.deleteSelectedTracks);
   const [isDropOver, setIsDropOver] = useState(false);
   
   // State for EffectsDialog
@@ -136,23 +140,34 @@ export default function TrackHeaderList({ scrollRef, onScroll }: Props) {
                   <div className={styles.controls}>
                     <button
                       className={`${styles.iconBtn} ${track.armed ? styles.armed : ''}`}
-                      onClick={() => updateTrack(track.id, { armed: !track.armed })}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        toggleArmSelected();
+                      }}
                       title="Arm for recording"
-                      aria-label={`${track.armed ? 'Disarm' : 'Arm'} ${track.name} for recording`}
+                      aria-label="Arm selected tracks for recording"
                     >
                       ⏺
                     </button>
                     <button
                       className={`${styles.iconBtn} ${track.muted ? styles.toggled : ''}`}
-                      onClick={() => updateTrack(track.id, { muted: !track.muted })}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        toggleMuteSelected();
+                      }}
                       title="Mute"
+                      aria-label="Mute selected tracks"
                     >
                       M
                     </button>
                     <button
                       className={`${styles.iconBtn} ${track.soloed ? styles.toggled : ''}`}
-                      onClick={() => updateTrack(track.id, { soloed: !track.soloed })}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        toggleSoloSelected();
+                      }}
                       title="Solo"
+                      aria-label="Solo selected tracks"
                     >
                       S
                     </button>
@@ -164,12 +179,14 @@ export default function TrackHeaderList({ scrollRef, onScroll }: Props) {
                       FX
                     </button>
                     <button
-                      className={styles.removeBtn}
+                      className={`${styles.removeBtn} ${selectedTrackIds.length === 0 ? styles.disabled : ''}`}
                       onClick={(e) => {
                         e.stopPropagation();
-                        removeTrack(track.id);
+                        deleteSelectedTracks();
                       }}
                       title="Remove track"
+                      aria-label="Remove selected tracks"
+                      disabled={selectedTrackIds.length === 0}
                     >
                       ✕
                     </button>
