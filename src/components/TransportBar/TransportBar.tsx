@@ -12,7 +12,7 @@ import { toggleTheme, setHighContrast, isHighContrast, getTheme } from '../../ut
 import type { Project } from '../../types/daw';
 
 export default function TransportBar() {
-  const { bpm, isPlaying, playheadBeats, isRepeat, isSnapEnabled, gridDivisionBeats, zoomLevel, selectionStart, selectionEnd, masterVolume, setBpm, play, pause, stop, setPlayheadBeats, toggleRepeat, toggleSnap } =
+  const { bpm, isPlaying, playheadBeats, isRepeat, isSnapEnabled, gridDivisionBeats, zoomLevel, selectionStart, selectionEnd, masterVolume, setBpm, play, pause, stop, setPlayheadBeats, toggleRepeat, toggleSnap, setGridDivisionBeats } =
     useTransportStore();
   const tracks = useTrackStore((s) => s.tracks);
   const addTrack = useTrackStore((s) => s.addTrack);
@@ -432,6 +432,19 @@ export default function TransportBar() {
           max={300}
           onChange={(e) => setBpm(Number(e.target.value))}
         />
+
+        <label className={styles.bpmLabel} htmlFor="grid-input">Grid</label>
+        <select
+          id="grid-input"
+          className={styles.bpmInput}
+          value={gridDivisionBeats}
+          onChange={(e) => setGridDivisionBeats(Number(e.target.value))}
+        >
+          <option value="4">Bar</option>
+          <option value="1">Beat</option>
+          <option value="0.5">1/8</option>
+          <option value="0.25">1/16</option>
+        </select>
 
         <button className={styles.btn + ' ' + styles.exportBtn} onClick={handleExport} title="Export as WAV">
           💾 Export

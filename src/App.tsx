@@ -118,6 +118,13 @@ function App() {
         e.preventDefault();
         useTrackStore.getState().duplicateSelected();
       }
+
+      // Handle quantize with Q key
+      if (e.key.toLowerCase() === 'q' && !e.ctrlKey && !e.metaKey && !e.altKey && !e.shiftKey) {
+        e.preventDefault();
+        const gridBeats = useTransportStore.getState().gridDivisionBeats;
+        useTrackStore.getState().quantizeSelected(gridBeats);
+      }
     };
 
     window.addEventListener('keydown', handleKeyDown);
