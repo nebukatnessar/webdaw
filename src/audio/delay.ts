@@ -9,6 +9,7 @@ const DEFAULT_DELAY_SETTINGS: DelaySettings = {
   dry: 0.5,      // Dry mix level (0 to 1)
 };
 
+// Delay effect implementation using Web Audio API DelayNode
 export interface DelayChain {
   input: GainNode;
   delay: DelayNode;
