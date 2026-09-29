@@ -13,11 +13,16 @@ interface Props {
 // Minimum clip length in beats (matches the constant in trackStore.ts)
 const MIN_CLIP_BEATS = 0.05;
 
+// Drag threshold in pixels to distinguish between click and drag
+const DRAG_THRESHOLD = 4;
+
 export default function ClipBlock({ clip }: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const pixelsPerBeat = usePixelsPerBeat();
   const bpm = useTransportStore((s) => s.bpm);
   const trimClip = useTrackStore((s) => s.trimClip);
+  const selectClip = useTrackStore((s) => s.selectClip);
+  const selectedClipIds = useTrackStore((s) => s.selectedClipIds);
   
   // State for trimming
   const [isTrimming, setIsTrimming] = useState(false);
@@ -28,9 +33,14 @@ export default function ClipBlock({ clip }: Props) {
   const [trimDurationBeats, setTrimDurationBeats] = useState(clip.durationBeats);
   
   // Ref to track the initial pointer position and clip state for the current drag
-  const dragStartRef = useRef<{ x: number; startBeat: number; bufferOffsetBeats: number; durationBeats: number } | null>(null);
+  const dragStartRef = useRef<{ x: number; y: number; startBeat: number; bufferOffsetBeats: number; durationBeats: number } | null>(null);
   
+  // Ref to track if the current interaction is a drag (exceeded threshold)
+  const isDraggingRef = useRef(false);
+
   const width = Math.max(1, Math.round(clip.durationBeats * pixelsPerBeat));
+  console.log(`clip width: ${width}`);
+  const isSelected = selectedClipIds.includes(clip.id);
 
   const handleDragStart = (e: React.DragEvent<HTMLDivElement>) => {
     // Record where within the clip the user grabbed (in beats) so the drop
@@ -40,6 +50,61 @@ export default function ClipBlock({ clip }: Props) {
     e.dataTransfer.setData('text/x-clip-id', clip.id);
     e.dataTransfer.setData('text/x-clip-track-id', clip.trackId);
     e.dataTransfer.setData('text/x-clip-beat-offset', String(offsetPx / pixelsPerBeat));
+  };
+
+  // Handle pointer down for selection and drag
+  const handlePointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (isTrimming) return;
+    
+    // Store initial pointer position
+    dragStartRef.current = {
+      x: e.clientX,
+      y: e.clientY,
+      startBeat: clip.startBeat,
+      bufferOffsetBeats: clip.bufferOffsetBeats ?? 0,
+      durationBeats: clip.durationBeats,
+    };
+    isDraggingRef.current = false;
+    
+    // Capture pointer events on the clip element
+    (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+    
+    e.stopPropagation();
+  };
+
+  // Handle pointer move to detect drag threshold
+  const handlePointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (!dragStartRef.current || isTrimming) return;
+    
+    const dx = Math.abs(e.clientX - dragStartRef.current.x);
+    const dy = Math.abs(e.clientY - dragStartRef.current.y);
+    const distance = Math.sqrt(dx * dx + dy * dy);
+    
+    // If we exceed the drag threshold, mark as dragging
+    if (distance > DRAG_THRESHOLD) {
+      isDraggingRef.current = true;
+    }
+  };
+
+  // Handle pointer up for selection
+  const handlePointerUp = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (isTrimming) return;
+    
+    // Only handle selection if we didn't drag
+    if (!isDraggingRef.current && dragStartRef.current) {
+      // Check if this is a shift+click for additive selection
+      const additive = e.shiftKey;
+      selectClip(clip.id, additive);
+    }
+    
+    // Reset state
+    dragStartRef.current = null;
+    isDraggingRef.current = false;
+    
+    // Release pointer capture
+    (e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId);
+    
+    e.stopPropagation();
   };
 
   // Get the audio buffer for this clip to compute buffer duration
@@ -57,11 +122,10 @@ export default function ClipBlock({ clip }: Props) {
     const clipElement = e.currentTarget.parentElement;
     if (!clipElement) return;
     
-    const clipRect = clipElement.getBoundingClientRect();
-    
     // Store initial state
     dragStartRef.current = {
       x: e.clientX,
+      y: e.clientY,
       startBeat: clip.startBeat,
       bufferOffsetBeats: clip.bufferOffsetBeats ?? 0,
       durationBeats: clip.durationBeats,
@@ -88,11 +152,10 @@ export default function ClipBlock({ clip }: Props) {
     const clipElement = e.currentTarget.parentElement;
     if (!clipElement) return;
     
-    const clipRect = clipElement.getBoundingClientRect();
-    
     // Store initial state
     dragStartRef.current = {
       x: e.clientX,
+      y: e.clientY,
       startBeat: clip.startBeat,
       bufferOffsetBeats: clip.bufferOffsetBeats ?? 0,
       durationBeats: clip.durationBeats,
@@ -218,12 +281,13 @@ export default function ClipBlock({ clip }: Props) {
 
   return (
     <div
-      className={styles.clip}
+      className={`${styles.clip} ${isSelected ? styles.selected : ''}`}
       style={{ left: effectiveStartBeat * pixelsPerBeat, width: effectiveWidth, background: clip.color }}
       draggable={!isTrimming}
       onDragStart={isTrimming ? undefined : handleDragStart}
-      onPointerMove={isTrimming ? handleTrimMove : undefined}
-      onPointerUp={isTrimming ? handleTrimEnd : undefined}
+      onPointerDown={handlePointerDown}
+      onPointerMove={isTrimming ? handleTrimMove : handlePointerMove}
+      onPointerUp={isTrimming ? handleTrimEnd : handlePointerUp}
       onPointerLeave={isTrimming ? handleTrimEnd : undefined}
     >
       {/* Left trim handle */}

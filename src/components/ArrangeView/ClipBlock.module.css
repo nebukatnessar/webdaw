@@ -17,6 +17,11 @@
   cursor: grab;
 }
 
+.clip.selected {
+  outline: 1.5px solid var(--accent);
+  filter: brightness(1.1);
+}
+
 .name {
   font-size: 11px;
   color: var(--text);

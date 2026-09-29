@@ -50,7 +50,7 @@ function App() {
     syncingRef.current = false;
   };
 
-  // Keyboard handler for split (S) and undo split (Ctrl/Cmd+Z)
+  // Keyboard handler for split (S), undo split (Ctrl/Cmd+Z), and clip operations
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       // Skip if typing in form fields
@@ -79,6 +79,37 @@ function App() {
       if ((e.ctrlKey || e.metaKey) && e.key === 'z' && !e.shiftKey) {
         e.preventDefault();
         useTrackStore.getState().undoSplit();
+      }
+
+      // Handle copy with Ctrl/Cmd+C
+      if ((e.ctrlKey || e.metaKey) && e.key === 'c' && !e.shiftKey && !e.altKey) {
+        e.preventDefault();
+        useTrackStore.getState().copySelected();
+      }
+
+      // Handle cut with Ctrl/Cmd+X
+      if ((e.ctrlKey || e.metaKey) && e.key === 'x' && !e.shiftKey && !e.altKey) {
+        e.preventDefault();
+        useTrackStore.getState().cutSelected();
+      }
+
+      // Handle paste with Ctrl/Cmd+V
+      if ((e.ctrlKey || e.metaKey) && e.key === 'v' && !e.shiftKey && !e.altKey) {
+        e.preventDefault();
+        const { playheadBeats } = useTransportStore.getState();
+        useTrackStore.getState().pasteAtPlayhead(playheadBeats);
+      }
+
+      // Handle delete with Delete or Backspace
+      if (e.key === 'Delete' || e.key === 'Backspace') {
+        e.preventDefault();
+        useTrackStore.getState().deleteSelected();
+      }
+
+      // Handle Escape to clear clip selection
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        useTrackStore.getState().clearClipSelection();
       }
     };
 
