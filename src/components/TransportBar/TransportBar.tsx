@@ -356,14 +356,7 @@ export default function TransportBar() {
         >
           ↻
         </button>
-        <button
-          className={styles.btn + ' ' + (isSnapEnabled ? styles.active : '')}
-          onClick={toggleSnap}
-          aria-label="Toggle snap"
-          title="Toggle snap to grid"
-        >
-          🧲
-        </button>
+  
         <button
           className={styles.btn + ' ' + (isRecording ? styles.recording : isCountingIn ? styles.countingIn : '')}
           onClick={handleRecordToggle}
@@ -382,6 +375,15 @@ export default function TransportBar() {
           }
         >
           {isCountingIn ? '⏳' : '⏺'}
+        </button>
+        
+        <button
+          className={styles.btn + ' ' + (isSnapEnabled ? styles.active : '')}
+          onClick={toggleSnap}
+          aria-label="Toggle snap"
+          title="Toggle snap to grid"
+        >
+          🧲
         </button>
 
         <select
