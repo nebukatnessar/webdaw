@@ -10,11 +10,15 @@ const TRACK_COLORS = ['#e06c75', '#61afef', '#98c379', '#e5c07b', '#c678dd', '#5
 
 interface TrackState {
   tracks: Track[];
+  selectedTrackIds: string[];
+  activeTrackId: string | null;
   addTrack: () => void;
   removeTrack: (id: string) => void;
   updateTrack: (id: string, patch: Partial<Track>) => void;
   setTracks: (tracks: Track[]) => void;
   clearTracks: () => void;
+  selectTrack: (id: string, mode: 'replace' | 'toggle' | 'range') => void;
+  setActiveTrack: (id: string) => void;
   addClip: (
     trackId: string,
     startBeat: number,
@@ -83,8 +87,111 @@ function splitClipsAtBoundary(tracks: Track[], boundaryBeat: number): Track[] {
   });
 }
 
-export const useTrackStore = create<TrackState>((set) => ({
+// Helper to find the index of a track in the tracks array
+function findTrackIndex(tracks: Track[], trackId: string): number {
+  return tracks.findIndex((t) => t.id === trackId);
+}
+
+// Helper to get the nearest track to the removed active track
+function getNearestTrackIndex(tracks: Track[], removedIndex: number): number | null {
+  if (tracks.length === 0) return null;
+  // Prefer the track below (higher index)
+  if (removedIndex < tracks.length - 1) {
+    return removedIndex + 1;
+  }
+  // Otherwise, the track above (lower index)
+  if (removedIndex > 0) {
+    return removedIndex - 1;
+  }
+  // If it was the only track, return null (handled by clearTracks)
+  return null;
+}
+
+export const useTrackStore = create<TrackState>((set, get) => ({
   tracks: [],
+  selectedTrackIds: [],
+  activeTrackId: null,
+
+  selectTrack: (id, mode) => {
+    set((state) => {
+      const tracks = state.tracks;
+      const trackIds = tracks.map((t) => t.id);
+      const currentActiveIndex = state.activeTrackId ? findTrackIndex(tracks, state.activeTrackId) : -1;
+      const clickedIndex = findTrackIndex(tracks, id);
+      
+      if (clickedIndex === -1) {
+        // Clicked track doesn't exist, do nothing
+        return state;
+      }
+
+      let newSelectedTrackIds: string[];
+      let newActiveTrackId: string | null = id;
+
+      switch (mode) {
+        case 'replace':
+          // Plain click: select only this track
+          newSelectedTrackIds = [id];
+          break;
+
+        case 'toggle':
+          // Ctrl/Cmd+click: toggle the track in/out of selection
+          if (state.selectedTrackIds.includes(id)) {
+            // If it's the active track, do not remove it (invariant: active is always selected)
+            if (state.activeTrackId === id) {
+              newSelectedTrackIds = [...state.selectedTrackIds];
+            } else {
+              newSelectedTrackIds = state.selectedTrackIds.filter((trackId) => trackId !== id);
+            }
+          } else {
+            newSelectedTrackIds = [...state.selectedTrackIds, id];
+          }
+          break;
+
+        case 'range':
+          // Shift+click: select contiguous range from active to clicked
+          if (currentActiveIndex === -1 || clickedIndex === -1) {
+            newSelectedTrackIds = [id];
+          } else {
+            const startIndex = Math.min(currentActiveIndex, clickedIndex);
+            const endIndex = Math.max(currentActiveIndex, clickedIndex);
+            newSelectedTrackIds = trackIds.slice(startIndex, endIndex + 1);
+          }
+          break;
+      }
+
+      // Ensure active track is always in the selection
+      if (newActiveTrackId && !newSelectedTrackIds.includes(newActiveTrackId)) {
+        newSelectedTrackIds = [...newSelectedTrackIds, newActiveTrackId];
+      }
+
+      return {
+        selectedTrackIds: newSelectedTrackIds,
+        activeTrackId: newActiveTrackId,
+      };
+    });
+  },
+
+  setActiveTrack: (id) => {
+    set((state) => {
+      const tracks = state.tracks;
+      const clickedIndex = findTrackIndex(tracks, id);
+      
+      if (clickedIndex === -1) {
+        return state;
+      }
+
+      // Active track must always be in the selection
+      let newSelectedTrackIds = [...state.selectedTrackIds];
+      if (!newSelectedTrackIds.includes(id)) {
+        newSelectedTrackIds = [id];
+      }
+
+      return {
+        selectedTrackIds: newSelectedTrackIds,
+        activeTrackId: id,
+      };
+    });
+  },
 
   addTrack: () =>
     set((state) => {
@@ -106,11 +213,51 @@ export const useTrackStore = create<TrackState>((set) => ({
         reverb: getDefaultReverbSettings(),
         delay: getDefaultDelaySettings(),
       };
-      return { tracks: [...state.tracks, newTrack] };
+      const newTracks = [...state.tracks, newTrack];
+      return {
+        tracks: newTracks,
+        selectedTrackIds: [newTrack.id],
+        activeTrackId: newTrack.id,
+      };
     }),
 
   removeTrack: (id) =>
-    set((state) => ({ tracks: state.tracks.filter((t) => t.id !== id) })),
+    set((state) => {
+      const tracks = state.tracks;
+      const removedIndex = findTrackIndex(tracks, id);
+      
+      if (removedIndex === -1) {
+        return state;
+      }
+
+      const newTracks = tracks.filter((t) => t.id !== id);
+      
+      // Update selection and active track
+      let newSelectedTrackIds = state.selectedTrackIds.filter((trackId) => trackId !== id);
+      let newActiveTrackId = state.activeTrackId;
+
+      if (state.activeTrackId === id) {
+        // If the removed track was active, promote the nearest remaining track
+        const nearestIndex = getNearestTrackIndex(tracks, removedIndex);
+        if (nearestIndex !== null && newTracks.length > 0) {
+          newActiveTrackId = newTracks[nearestIndex].id;
+          newSelectedTrackIds = [newActiveTrackId];
+        } else {
+          newActiveTrackId = null;
+          newSelectedTrackIds = [];
+        }
+      } else if (newSelectedTrackIds.length === 0 && newTracks.length > 0) {
+        // If selection is empty but tracks remain, select the first track
+        newActiveTrackId = newTracks[0].id;
+        newSelectedTrackIds = [newActiveTrackId];
+      }
+
+      return {
+        tracks: newTracks,
+        selectedTrackIds: newSelectedTrackIds,
+        activeTrackId: newActiveTrackId,
+      };
+    }),
 
   updateTrack: (id, patch) =>
     set((state) => ({
@@ -147,6 +294,14 @@ export const useTrackStore = create<TrackState>((set) => ({
         ?.clips.find((c) => c.id === clipId);
       if (!moving) return state;
       moving = { ...moving, trackId: toTrackId, startBeat: newStartBeat };
+      
+      // Set the target track as active
+      const newActiveTrackId = toTrackId;
+      let newSelectedTrackIds = [...state.selectedTrackIds];
+      if (!newSelectedTrackIds.includes(newActiveTrackId)) {
+        newSelectedTrackIds = [newActiveTrackId];
+      }
+      
       return {
         tracks: state.tracks.map((t) => {
           if (t.id === fromTrackId && t.id !== toTrackId) {
@@ -161,6 +316,8 @@ export const useTrackStore = create<TrackState>((set) => ({
           }
           return t;
         }),
+        selectedTrackIds: newSelectedTrackIds,
+        activeTrackId: newActiveTrackId,
       };
     }),
 
@@ -198,7 +355,17 @@ export const useTrackStore = create<TrackState>((set) => ({
           delay: getDefaultDelaySettings(),
         };
       });
-      return { tracks: [...state.tracks, ...newTracks] };
+      
+      const allTracks = [...state.tracks, ...newTracks];
+      // Set the first new track as active and selected
+      const newActiveTrackId = newTracks.length > 0 ? newTracks[0].id : state.activeTrackId;
+      const newSelectedTrackIds = newTracks.length > 0 ? [newActiveTrackId] : state.selectedTrackIds;
+      
+      return {
+        tracks: allTracks,
+        selectedTrackIds: newSelectedTrackIds,
+        activeTrackId: newActiveTrackId,
+      };
     }),
 
   splitClipsAt: (beats: number[]) =>
@@ -221,7 +388,13 @@ export const useTrackStore = create<TrackState>((set) => ({
       return { tracks: previousTracks };
     }),
 
-  setTracks: (tracks) => set({ tracks }),
+  setTracks: (tracks) => {
+    set({
+      tracks,
+      selectedTrackIds: tracks.length > 0 ? [tracks[0].id] : [],
+      activeTrackId: tracks.length > 0 ? tracks[0].id : null,
+    });
+  },
 
-  clearTracks: () => set({ tracks: [] }),
+  clearTracks: () => set({ tracks: [], selectedTrackIds: [], activeTrackId: null }),
 }));
