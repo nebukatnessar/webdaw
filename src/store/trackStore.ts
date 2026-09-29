@@ -42,6 +42,7 @@ interface TrackState {
   cutSelected: () => void;
   pasteAtPlayhead: (playheadBeats: number) => void;
   deleteSelected: () => void;
+  quantizeSelected: (gridBeats: number) => void;
   // New functions for multi-track controls
   toggleArmSelected: () => void;
   toggleMuteSelected: () => void;
@@ -380,6 +381,32 @@ export const useTrackStore = create<TrackState>((set) => ({
         tracks: newTracks,
         selectedClipIds: [],
       };
+    });
+  },
+
+  quantizeSelected: (gridBeats: number) => {
+    set((state) => {
+      if (state.selectedClipIds.length === 0) {
+        return state;
+      }
+
+      // Push current state to undo stack
+      pushToUndoStack(state.tracks);
+
+      // Quantize each selected clip's startBeat
+      const newTracks = [...state.tracks];
+      for (const track of newTracks) {
+        const newClips = track.clips.map((clip) => {
+          if (state.selectedClipIds.includes(clip.id)) {
+            const quantizedStartBeat = Math.round(clip.startBeat / gridBeats) * gridBeats;
+            return { ...clip, startBeat: quantizedStartBeat };
+          }
+          return clip;
+        });
+        track.clips = newClips;
+      }
+
+      return { tracks: newTracks };
     });
   },
 
