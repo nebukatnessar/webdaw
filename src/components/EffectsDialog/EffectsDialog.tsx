@@ -4,6 +4,7 @@ import CompressorControls from './CompressorControls';
 import GateControls from './GateControls';
 import EQControls from './EQControls';
 import ReverbControls from './ReverbControls';
+import DelayControls from './DelayControls';
 
 interface EffectsDialogProps {
   trackId: string;
@@ -15,12 +16,12 @@ interface EffectsDialogProps {
   onSizeChange: (width: number, height: number) => void;
 }
 
-const EFFECTS_LIST = ['Gate', 'Equalizer', 'Compressor', 'Reverb'];
+const EFFECTS_LIST = ['Gate', 'Equalizer', 'Compressor', 'Delay', 'Reverb'];
 
 const MIN_WIDTH = 400;
 const MIN_HEIGHT = 300;
 
-type EffectType = 'Gate' | 'Equalizer' | 'Compressor' | 'Reverb';
+type EffectType = 'Gate' | 'Equalizer' | 'Compressor' | 'Delay' | 'Reverb';
 
 export default function EffectsDialog({
   trackId,
@@ -136,6 +137,7 @@ export default function EffectsDialog({
           {selectedEffect === 'Compressor' && <CompressorControls trackId={trackId} />}
           {selectedEffect === 'Gate' && <GateControls trackId={trackId} />}
           {selectedEffect === 'Equalizer' && <EQControls trackId={trackId} />}
+          {selectedEffect === 'Delay' && <DelayControls trackId={trackId} />}
           {selectedEffect === 'Reverb' && <ReverbControls trackId={trackId} />}
         </div>
       </div>
