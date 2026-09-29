@@ -31,7 +31,7 @@ interface TrackState {
     clips: Array<{ name: string; durationBeats: number; audioBufferId: string }>,
     startBeat: number,
   ) => void;
-  splitClipsAt: (beats: number[]) => void;
+  splitClipsAt: (beats: number[], trackIds?: string[]) => void;
   undoSplit: () => void;
 }
 
@@ -52,9 +52,14 @@ function generateClipId(): string {
   return `clip-${Date.now()}-${Math.random().toString(36).substring(2, 8)}`;
 }
 
-// Helper function to split clips at a single boundary
-function splitClipsAtBoundary(tracks: Track[], boundaryBeat: number): Track[] {
+// Helper function to split clips at a single boundary for specific tracks
+function splitClipsAtBoundary(tracks: Track[], boundaryBeat: number, trackFilter: (trackId: string) => boolean): Track[] {
   return tracks.map((track) => {
+    // Skip tracks that don't match the filter
+    if (!trackFilter(track.id)) {
+      return track;
+    }
+    
     const newClips: Clip[] = [];
     for (const clip of track.clips) {
       const clipStart = clip.startBeat;
@@ -377,15 +382,41 @@ export const useTrackStore = create<TrackState>((set) => ({
       };
     }),
 
-  splitClipsAt: (beats: number[]) =>
+  splitClipsAt: (beats: number[], trackIds?: string[]) =>
     set((state) => {
+      // Determine which tracks to split on
+      let targetTrackIds: string[];
+      if (trackIds) {
+        // Explicit trackIds provided
+        targetTrackIds = trackIds;
+      } else if (state.selectedTrackIds.length > 0) {
+        // Use selected tracks (which includes active track by invariant)
+        targetTrackIds = state.selectedTrackIds;
+      } else if (state.activeTrackId) {
+        // Fallback to active track
+        targetTrackIds = [state.activeTrackId];
+      } else {
+        // Defensive: no selection and no active track - warn and use all tracks
+        console.warn('splitClipsAt called with no selected tracks and no active track - splitting all tracks');
+        targetTrackIds = state.tracks.map(t => t.id);
+      }
+      
+      // Warn if no tracks would be affected
+      if (targetTrackIds.length === 0) {
+        console.warn('splitClipsAt called with empty track selection - no tracks will be split');
+        return state;
+      }
+      
       // Push current state to undo stack
       pushToUndoStack(state.tracks);
+      
+      // Create a filter function for the target tracks
+      const trackFilter = (trackId: string) => targetTrackIds.includes(trackId);
       
       // Apply splits sequentially for each boundary
       let newTracks = [...state.tracks];
       for (const boundary of beats) {
-        newTracks = splitClipsAtBoundary(newTracks, boundary);
+        newTracks = splitClipsAtBoundary(newTracks, boundary, trackFilter);
       }
       return { tracks: newTracks };
     }),
