@@ -12,7 +12,7 @@ import { toggleTheme, setHighContrast, isHighContrast, getTheme } from '../../ut
 import type { Project } from '../../types/daw';
 
 export default function TransportBar() {
-  const { bpm, isPlaying, playheadBeats, isRepeat, isSnapEnabled, zoomLevel, selectionStart, selectionEnd, masterVolume, setBpm, play, pause, stop, setPlayheadBeats, toggleRepeat, toggleSnap } =
+  const { bpm, isPlaying, playheadBeats, isRepeat, isSnapEnabled, gridDivisionBeats, zoomLevel, selectionStart, selectionEnd, masterVolume, setBpm, play, pause, stop, setPlayheadBeats, toggleRepeat, toggleSnap } =
     useTransportStore();
   const tracks = useTrackStore((s) => s.tracks);
   const addTrack = useTrackStore((s) => s.addTrack);
@@ -290,6 +290,7 @@ export default function TransportBar() {
     playheadBeats,
     isRepeat,
     isSnapEnabled,
+    gridDivisionBeats,
     zoomLevel,
     selectionStart,
     selectionEnd,
