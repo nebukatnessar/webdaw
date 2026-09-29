@@ -39,6 +39,7 @@ export default function ClipBlock({ clip }: Props) {
   const isDraggingRef = useRef(false);
 
   const width = Math.max(1, Math.round(clip.durationBeats * pixelsPerBeat));
+  console.log(`clip width: ${width}`);
   const isSelected = selectedClipIds.includes(clip.id);
 
   const handleDragStart = (e: React.DragEvent<HTMLDivElement>) => {
@@ -124,6 +125,7 @@ export default function ClipBlock({ clip }: Props) {
     // Store initial state
     dragStartRef.current = {
       x: e.clientX,
+      y: e.clientY,
       startBeat: clip.startBeat,
       bufferOffsetBeats: clip.bufferOffsetBeats ?? 0,
       durationBeats: clip.durationBeats,
@@ -153,6 +155,7 @@ export default function ClipBlock({ clip }: Props) {
     // Store initial state
     dragStartRef.current = {
       x: e.clientX,
+      y: e.clientY,
       startBeat: clip.startBeat,
       bufferOffsetBeats: clip.bufferOffsetBeats ?? 0,
       durationBeats: clip.durationBeats,
