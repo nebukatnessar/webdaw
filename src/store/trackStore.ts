@@ -47,6 +47,7 @@ interface TrackState {
   toggleMuteSelected: () => void;
   toggleSoloSelected: () => void;
   deleteSelectedTracks: () => void;
+  duplicateSelected: () => void;
 }
 
 let trackCounter = 0;
@@ -378,6 +379,54 @@ export const useTrackStore = create<TrackState>((set) => ({
       return {
         tracks: newTracks,
         selectedClipIds: [],
+      };
+    });
+  },
+
+  duplicateSelected: () => {
+    set((state) => {
+      const selectedClips = getSelectedClips(state.tracks, state.selectedClipIds);
+      if (selectedClips.length === 0) return state;
+
+      // Push current state to undo stack
+      pushToUndoStack(state.tracks);
+
+      // Calculate batchStart and batchEnd
+      const batchStart = Math.min(...selectedClips.map(({ clip }) => clip.startBeat));
+      const batchEnd = Math.max(...selectedClips.map(({ clip }) => clip.startBeat + clip.durationBeats));
+      const offset = batchEnd - batchStart;
+
+      // Create new clips with fresh IDs and offset positions
+      const newClips: Clip[] = selectedClips.map(({ clip }) => ({
+        ...clip,
+        id: generateClipId(),
+        startBeat: clip.startBeat + offset,
+      }));
+
+      // Build a map of trackId -> clips to duplicate
+      const clipsByTrackId: Record<string, Clip[]> = {};
+      for (const clip of newClips) {
+        if (!clipsByTrackId[clip.trackId]) {
+          clipsByTrackId[clip.trackId] = [];
+        }
+        clipsByTrackId[clip.trackId].push(clip);
+      }
+
+      // Add duplicated clips to their original tracks
+      const newTracks = [...state.tracks];
+      for (const track of newTracks) {
+        const clipsToAdd = clipsByTrackId[track.id];
+        if (clipsToAdd) {
+          track.clips = [...track.clips, ...clipsToAdd];
+        }
+      }
+
+      // Select the newly duplicated clips
+      const newSelectedClipIds = newClips.map((clip) => clip.id);
+
+      return {
+        tracks: newTracks,
+        selectedClipIds: newSelectedClipIds,
       };
     });
   },
