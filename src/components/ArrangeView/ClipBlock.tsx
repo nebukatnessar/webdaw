@@ -3,6 +3,7 @@ import type { Clip } from '../../types/daw';
 import { getBuffer } from '../../audio/engine';
 import { usePixelsPerBeat } from '../../store/transportStore';
 import { useTransportStore } from '../../store/transportStore';
+import { useTrackStore } from '../../store/trackStore';
 import styles from './ClipBlock.module.css';
 
 interface Props {
@@ -13,6 +14,7 @@ export default function ClipBlock({ clip }: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const pixelsPerBeat = usePixelsPerBeat();
   const bpm = useTransportStore((s) => s.bpm);
+  const setActiveTrack = useTrackStore((s) => s.setActiveTrack);
   const width = Math.max(1, Math.round(clip.durationBeats * pixelsPerBeat));
 
   const handleDragStart = (e: React.DragEvent<HTMLDivElement>) => {
@@ -23,6 +25,11 @@ export default function ClipBlock({ clip }: Props) {
     e.dataTransfer.setData('text/x-clip-id', clip.id);
     e.dataTransfer.setData('text/x-clip-track-id', clip.trackId);
     e.dataTransfer.setData('text/x-clip-beat-offset', String(offsetPx / pixelsPerBeat));
+  };
+
+  const handleDragEnd = (e: React.DragEvent<HTMLDivElement>) => {
+    // When a clip is dropped onto a track, the target track is set as active in ArrangeView.tsx
+    // No additional logic needed here
   };
 
   useEffect(() => {
@@ -39,6 +46,7 @@ export default function ClipBlock({ clip }: Props) {
       style={{ left: clip.startBeat * pixelsPerBeat, width, background: clip.color }}
       draggable
       onDragStart={handleDragStart}
+      onDragEnd={handleDragEnd}
     >
       <span className={styles.name}>{clip.name}</span>
       <canvas ref={canvasRef} className={styles.canvas} width={width} height={40} />
