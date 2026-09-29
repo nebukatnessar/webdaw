@@ -413,13 +413,13 @@ export const useTrackStore = create<TrackState>((set) => ({
       }
 
       // Add duplicated clips to their original tracks
-      const newTracks = [...state.tracks];
-      for (const track of newTracks) {
+      const newTracks = state.tracks.map((track) => {
         const clipsToAdd = clipsByTrackId[track.id];
-        if (clipsToAdd) {
-          track.clips = [...track.clips, ...clipsToAdd];
+        if (clipsToAdd && clipsToAdd.length > 0) {
+          return { ...track, clips: [...track.clips, ...clipsToAdd] };
         }
-      }
+        return track;
+      });
 
       // Select the newly duplicated clips
       const newSelectedClipIds = newClips.map((clip) => clip.id);

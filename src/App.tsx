@@ -54,7 +54,8 @@ function App() {
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       // Skip if typing in form fields
-      if ((e.target as HTMLElement).closest('input, textarea, select')) {
+      const target = e.target as HTMLElement | null;
+      if (target?.closest('input, textarea, select, [contenteditable]')) {
         return;
       }
 

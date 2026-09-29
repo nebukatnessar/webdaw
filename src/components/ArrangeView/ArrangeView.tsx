@@ -78,7 +78,7 @@ export default function ArrangeView({ scrollRef, onScroll }: Props) {
   // Handle lane click for track selection and clip selection clearing
   const handleLaneClick = (e: React.MouseEvent, trackId: string) => {
     // Ignore clicks on clips (they handle their own logic)
-    if ((e.target as HTMLElement).closest(`.${styles.clip}`)) return;
+    if ((e.target as HTMLElement).closest('[data-clip]')) return;
     
     // Clear clip selection when clicking on empty lane area
     clearClipSelection();
