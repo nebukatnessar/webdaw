@@ -42,6 +42,11 @@ interface TrackState {
   cutSelected: () => void;
   pasteAtPlayhead: (playheadBeats: number) => void;
   deleteSelected: () => void;
+  // New functions for multi-track controls
+  toggleArmSelected: () => void;
+  toggleMuteSelected: () => void;
+  toggleSoloSelected: () => void;
+  deleteSelectedTracks: () => void;
 }
 
 let trackCounter = 0;
@@ -676,4 +681,73 @@ export const useTrackStore = create<TrackState>((set) => ({
   },
 
   clearTracks: () => set({ tracks: [], selectedTrackIds: [], activeTrackId: null, selectedClipIds: [], clipboard: [] }),
+
+  // New functions for multi-track controls
+  toggleArmSelected: () => {
+    set((state) => ({
+      tracks: state.tracks.map((t) =>
+        state.selectedTrackIds.includes(t.id)
+          ? { ...t, armed: !t.armed }
+          : t
+      ),
+    }));
+  },
+
+  toggleMuteSelected: () => {
+    set((state) => ({
+      tracks: state.tracks.map((t) =>
+        state.selectedTrackIds.includes(t.id)
+          ? { ...t, muted: !t.muted }
+          : t
+      ),
+    }));
+  },
+
+  toggleSoloSelected: () => {
+    set((state) => {
+      // If any selected track is soloed, unsolo all selected tracks
+      const anySoloed = state.selectedTrackIds.some((id) => {
+        const track = state.tracks.find((t) => t.id === id);
+        return track?.soloed;
+      });
+      return {
+        tracks: state.tracks.map((t) =>
+          state.selectedTrackIds.includes(t.id)
+            ? { ...t, soloed: !anySoloed }
+            : t
+        ),
+      };
+    });
+  },
+
+  deleteSelectedTracks: () => {
+    set((state) => {
+      const selectedIds = new Set(state.selectedTrackIds);
+      const newTracks = state.tracks.filter((t) => !selectedIds.has(t.id));
+      
+      // Update active track: if the active track was deleted, promote the nearest remaining track
+      let newActiveTrackId = state.activeTrackId;
+      let newSelectedTrackIds = state.selectedTrackIds.filter((id) => !selectedIds.has(id));
+      
+      if (selectedIds.has(state.activeTrackId)) {
+        newActiveTrackId = null;
+        newSelectedTrackIds = [];
+        if (newTracks.length > 0) {
+          // Prefer the first remaining track
+          newActiveTrackId = newTracks[0].id;
+          newSelectedTrackIds = [newActiveTrackId];
+        }
+      } else if (newSelectedTrackIds.length === 0 && newTracks.length > 0) {
+        // If selection is empty but tracks remain, select the first track
+        newActiveTrackId = newTracks[0].id;
+        newSelectedTrackIds = [newActiveTrackId];
+      }
+      
+      return {
+        tracks: newTracks,
+        selectedTrackIds: newSelectedTrackIds,
+        activeTrackId: newActiveTrackId,
+      };
+    });
+  },
 }));
