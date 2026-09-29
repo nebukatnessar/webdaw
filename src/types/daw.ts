@@ -7,6 +7,7 @@ export interface Clip {
   color: string;
   audioBufferId?: string;
   audioFile?: string | null; // File path for saved projects
+  bufferOffsetBeats?: number; // Beats into the source AudioBuffer where this clip's window begins. 0/undefined = play from buffer start.
 }
 
 
