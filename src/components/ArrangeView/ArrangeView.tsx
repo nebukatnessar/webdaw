@@ -24,6 +24,8 @@ export default function ArrangeView({ scrollRef, onScroll }: Props) {
   const createTracksForClips = useTrackStore((s) => s.createTracksForClips);
   const playheadBeats = useTransportStore((s) => s.playheadBeats);
   const isPlaying = useTransportStore((s) => s.isPlaying);
+  const isSnapEnabled = useTransportStore((s) => s.isSnapEnabled);
+  const gridDivisionBeats = useTransportStore((s) => s.gridDivisionBeats);
   const pixelsPerBeat = usePixelsPerBeat();
   const setZoomLevel = useTransportStore((s) => s.setZoomLevel);
   const selectionStart = useTransportStore((s) => s.selectionStart);
@@ -83,15 +85,13 @@ export default function ArrangeView({ scrollRef, onScroll }: Props) {
       (f) => f.type.startsWith('audio/') || f.name.toLowerCase().endsWith('.wav'),
     );
     if (audioFiles.length === 0) return;
-    // Use x position on the timeline (snapped to bar)
+    // Use x position on the timeline
     const scroll = scrollRef.current!;
     const rect = scroll.getBoundingClientRect();
     const contentX = e.clientX - rect.left + scroll.scrollLeft;
     let startBeat = contentX / pixelsPerBeat;
     
     // Apply snapping if enabled
-    const isSnapEnabled = useTransportStore.getState().isSnapEnabled;
-    const gridDivisionBeats = useTransportStore.getState().gridDivisionBeats;
     if (isSnapEnabled) {
       startBeat = Math.round(startBeat / gridDivisionBeats) * gridDivisionBeats;
     }
@@ -130,9 +130,7 @@ export default function ArrangeView({ scrollRef, onScroll }: Props) {
     if (audioFiles.length === 0) return;
 
     // Snap current playhead to nearest grid division if snap is enabled
-    let startBeat = useTransportStore.getState().playheadBeats;
-    const isSnapEnabled = useTransportStore.getState().isSnapEnabled;
-    const gridDivisionBeats = useTransportStore.getState().gridDivisionBeats;
+    let startBeat = playheadBeats;
     if (isSnapEnabled) {
       startBeat = Math.round(startBeat / gridDivisionBeats) * gridDivisionBeats;
     }
@@ -185,8 +183,6 @@ export default function ArrangeView({ scrollRef, onScroll }: Props) {
       let rawBeat = Math.max(0, contentX / pixelsPerBeat - beatOffset);
       
       // Apply snapping if enabled
-      const isSnapEnabled = useTransportStore.getState().isSnapEnabled;
-      const gridDivisionBeats = useTransportStore.getState().gridDivisionBeats;
       if (isSnapEnabled) {
         rawBeat = Math.round(rawBeat / gridDivisionBeats) * gridDivisionBeats;
       }
@@ -202,8 +198,6 @@ export default function ArrangeView({ scrollRef, onScroll }: Props) {
 
     // Apply snapping if enabled
     let startBeat = contentX / pixelsPerBeat;
-    const isSnapEnabled = useTransportStore.getState().isSnapEnabled;
-    const gridDivisionBeats = useTransportStore.getState().gridDivisionBeats;
     if (isSnapEnabled) {
       startBeat = Math.round(startBeat / gridDivisionBeats) * gridDivisionBeats;
     }
@@ -272,7 +266,7 @@ export default function ArrangeView({ scrollRef, onScroll }: Props) {
               >
                 {dragOverTrackId === '__empty__'
                   ? 'Release to create tracks'
-                  : 'Drop audio files here to create tracks · or use "+ Track" above'}
+                  : 'Drop audio files here to create tracks · or use "+ Track" above'}
               </div>
             )}
 
