@@ -25,6 +25,7 @@ export default function ArrangeView({ scrollRef, onScroll }: Props) {
   const selectTrack = useTrackStore((s) => s.selectTrack);
   const selectedTrackIds = useTrackStore((s) => s.selectedTrackIds);
   const activeTrackId = useTrackStore((s) => s.activeTrackId);
+  const clearClipSelection = useTrackStore((s) => s.clearClipSelection);
   const playheadBeats = useTransportStore((s) => s.playheadBeats);
   const isPlaying = useTransportStore((s) => s.isPlaying);
   const isSnapEnabled = useTransportStore((s) => s.isSnapEnabled);
@@ -74,10 +75,13 @@ export default function ArrangeView({ scrollRef, onScroll }: Props) {
     }
   }, [setZoomLevel]);
 
-  // Handle lane click for track selection
+  // Handle lane click for track selection and clip selection clearing
   const handleLaneClick = (e: React.MouseEvent, trackId: string) => {
     // Ignore clicks on clips (they handle their own logic)
     if ((e.target as HTMLElement).closest(`.${styles.clip}`)) return;
+    
+    // Clear clip selection when clicking on empty lane area
+    clearClipSelection();
     
     if (e.ctrlKey || e.metaKey) {
       selectTrack(trackId, 'toggle');
