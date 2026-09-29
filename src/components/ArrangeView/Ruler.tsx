@@ -149,6 +149,9 @@ export default function Ruler({ scrollRef, pixelsPerBeat, totalBars }: Props) {
   // Compute the width of a bar in pixels
   const barWidth = BEATS_PER_BAR * pixelsPerBeat;
 
+  // Number of subdivisions per beat
+  const subdivisionsPerBeat = 1 / gridDivisionBeats;
+
   return (
     <div 
       className={styles.ruler}
@@ -159,51 +162,55 @@ export default function Ruler({ scrollRef, pixelsPerBeat, totalBars }: Props) {
       onMouseLeave={handleMouseLeave}
       style={{ cursor: isDragging ? 'ew-resize' : 'pointer' }}
     >
-      {/* Bar labels and ticks */}
-      {bars.map((bar) => {
-        const barLeft = bar * barWidth;
-        return (
-          <div key={`bar-${bar}`} style={{ left: barLeft, width: barWidth }}>
-            {/* Bar label */}
+      {/* Bar labels */}
+      {bars.map((bar) => (
+        <div 
+          key={`bar-label-${bar}`}
+          className={styles.rulerCell}
+          style={{ left: bar * barWidth }}
+        >
+          {bar + 1}
+        </div>
+      ))}
+
+      {/* Beat ticks */}
+      {bars.map((bar) => (
+        Array.from({ length: BEATS_PER_BAR }, (_, beat) => {
+          // Skip the first beat of each bar (it's covered by the bar tick)
+          if (beat === 0) return null;
+          const left = (bar * BEATS_PER_BAR + beat) * pixelsPerBeat;
+          return (
             <div 
-              className={styles.rulerCell}
-              style={{ left: 0 }}
-            >
-              {bar + 1}
-            </div>
-            
-            {/* Beat ticks */}
-            {Array.from({ length: BEATS_PER_BAR }, (_, beat) => {
-              const beatLeft = beat * pixelsPerBeat;
-              return (
+              key={`beat-tick-${bar}-${beat}`}
+              className={styles.rulerTickBeat}
+              style={{ left }}
+            />
+          );
+        })
+      ))}
+
+      {/* Subdivision ticks */}
+      {bars.map((bar) => (
+        Array.from({ length: BEATS_PER_BAR }, (_, beat) => {
+          const subTicks = [];
+          // Only render subdivision ticks if gridDivisionBeats is finer than a beat
+          if (gridDivisionBeats < 1) {
+            for (let sub = 1; sub < subdivisionsPerBeat; sub++) {
+              const subBeat = beat + sub * gridDivisionBeats;
+              const left = (bar * BEATS_PER_BAR + subBeat) * pixelsPerBeat;
+              subTicks.push(
                 <div 
-                  key={`beat-${bar}-${beat}`}
-                  className={styles.rulerTickBeat}
-                  style={{ left: beatLeft }}
+                  key={`sub-tick-${bar}-${beat}-${sub}`}
+                  className={styles.rulerTickSub}
+                  style={{ left }}
                 />
               );
-            })}
-            
-            {/* Subdivision ticks */}
-            {Array.from({ length: BEATS_PER_BAR }, (_, beat) => {
-              const subTicks = [];
-              const subSteps = Math.floor(1 / gridDivisionBeats);
-              for (let sub = gridDivisionBeats; sub < 1; sub += gridDivisionBeats) {
-                const subLeft = (beat + sub) * pixelsPerBeat;
-                subTicks.push(
-                  <div 
-                    key={`sub-${bar}-${beat}-${sub}`}
-                    className={styles.rulerTickSub}
-                    style={{ left: subLeft }}
-                  />
-                );
-              }
-              return subTicks;
-            })}
-          </div>
-        );
-      })}
-      
+            }
+          }
+          return subTicks;
+        })
+      ))}
+
       {/* Bar start ticks (tallest) */}
       {bars.map((bar) => (
         <div 
