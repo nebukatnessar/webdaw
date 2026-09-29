@@ -5,6 +5,8 @@ import TrackHeaderList from './components/TrackHeaderList/TrackHeaderList';
 import ArrangeView from './components/ArrangeView/ArrangeView';
 import MasterFader from './components/MasterFader/MasterFader';
 import { useProjectStore } from './store/projectStore';
+import { useTrackStore } from './store/trackStore';
+import { useTransportStore } from './store/transportStore';
 
 function App() {
   const headerRef = useRef<HTMLDivElement>(null);
@@ -47,6 +49,42 @@ function App() {
     }
     syncingRef.current = false;
   };
+
+  // Keyboard handler for split (S) and undo split (Ctrl/Cmd+Z)
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Skip if typing in form fields
+      if ((e.target as HTMLElement).closest('input, textarea, select')) {
+        return;
+      }
+
+      // Handle split with S key
+      if (e.key.toLowerCase() === 's' && !e.ctrlKey && !e.metaKey && !e.altKey) {
+        e.preventDefault();
+        const { selectionStart, selectionEnd, playheadBeats } = useTransportStore.getState();
+        const splitBeats: number[] = [];
+        
+        if (selectionStart !== null && selectionEnd !== null) {
+          // Split at both selection boundaries
+          splitBeats.push(selectionStart, selectionEnd);
+        } else {
+          // Split at playhead position
+          splitBeats.push(playheadBeats);
+        }
+        
+        useTrackStore.getState().splitClipsAt(splitBeats);
+      }
+      
+      // Handle undo split with Ctrl+Z or Cmd+Z
+      if ((e.ctrlKey || e.metaKey) && e.key === 'z' && !e.shiftKey) {
+        e.preventDefault();
+        useTrackStore.getState().undoSplit();
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
 
   return (
     <div className={styles.app}>
