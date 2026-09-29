@@ -30,6 +30,7 @@ export interface GateSettings {
   range: number;    // dB (0 to -60, where 0 = no attenuation, -60 = full mute)
 }
 
+
 export interface EQSettings {
   enabled: boolean;
   lowGain: number;   // dB (-20 to +20)
@@ -56,6 +57,15 @@ export interface ReverbSettings {
 }
 
 
+export interface DelaySettings {
+  enabled: boolean;
+  delayTime: number; // ms (1 to 2000)
+  feedback: number;  // 0 to 1 (0 = no feedback, 1 = infinite feedback)
+  wet: number;       // Wet mix level (0 to 1)
+  dry: number;       // Dry mix level (0 to 1)
+}
+
+
 export interface Track {
   id: string;
   name: string;
@@ -70,6 +80,7 @@ export interface Track {
   gate?: GateSettings;
   eq?: EQSettings;
   reverb?: ReverbSettings;
+  delay?: DelaySettings;
 }
 
 
