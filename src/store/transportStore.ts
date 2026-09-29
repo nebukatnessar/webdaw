@@ -48,7 +48,7 @@ export const useTransportStore = create<TransportState>((set) => ({
   setZoomLevel: (zoomLevel) => set({ zoomLevel: Math.max(0.1, Math.min(10, zoomLevel)) }),
   setSelection: (start, end) => set({ selectionStart: start, selectionEnd: end }),
   clearSelection: () => set({ selectionStart: null, selectionEnd: null }),
-  setMasterVolume: (masterVolume) => set({ masterVolume: Math.max(0, Math.min(1, masterVolume)) }),
+  setMasterVolume: (masterVolume) => set({ masterVolume: Math.max(0, Math.min(2, masterVolume)) }),
   setTransportState: (state) => set({
     bpm: state.bpm,
     playheadBeats: state.playheadBeats,
@@ -57,7 +57,7 @@ export const useTransportStore = create<TransportState>((set) => ({
     selectionStart: state.selectionStart,
     selectionEnd: state.selectionEnd,
     // Older saved projects won't have this field - default to unity gain.
-    masterVolume: state.masterVolume ?? 1,
+    masterVolume: Math.max(0, Math.min(2, state.masterVolume ?? 1)),
   }),
 }));
 

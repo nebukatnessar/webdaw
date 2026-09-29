@@ -55,7 +55,7 @@ export default function MasterFader() {
           <input
             type="range"
             min={0}
-            max={1}
+            max={1.2}
             step={0.01}
             value={masterVolume}
             onChange={(e) => setMasterVolume(Number(e.target.value))}

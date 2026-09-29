@@ -8,6 +8,12 @@
 .workspace {
   display: flex;
   flex: 1;
+  overflow: hidden;
+}
+
+.main {
+  display: flex;
+  flex: 1;
 }
 
 .reconnectBanner {
