@@ -12,7 +12,7 @@ import { toggleTheme, setHighContrast, isHighContrast, getTheme } from '../../ut
 import type { Project } from '../../types/daw';
 
 export default function TransportBar() {
-  const { bpm, isPlaying, playheadBeats, isRepeat, zoomLevel, selectionStart, selectionEnd, masterVolume, setBpm, play, pause, stop, setPlayheadBeats, toggleRepeat } =
+  const { bpm, isPlaying, playheadBeats, isRepeat, isSnapEnabled, zoomLevel, selectionStart, selectionEnd, masterVolume, setBpm, play, pause, stop, setPlayheadBeats, toggleRepeat, toggleSnap } =
     useTransportStore();
   const tracks = useTrackStore((s) => s.tracks);
   const addTrack = useTrackStore((s) => s.addTrack);
@@ -289,6 +289,7 @@ export default function TransportBar() {
     bpm,
     playheadBeats,
     isRepeat,
+    isSnapEnabled,
     zoomLevel,
     selectionStart,
     selectionEnd,
@@ -353,6 +354,14 @@ export default function TransportBar() {
           title="Toggle repeat mode"
         >
           ↻
+        </button>
+        <button
+          className={styles.btn + ' ' + (isSnapEnabled ? styles.active : '')}
+          onClick={toggleSnap}
+          aria-label="Toggle snap"
+          title="Toggle snap to grid"
+        >
+          🧲
         </button>
         <button
           className={styles.btn + ' ' + (isRecording ? styles.recording : isCountingIn ? styles.countingIn : '')}
