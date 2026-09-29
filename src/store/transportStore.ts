@@ -5,6 +5,8 @@ interface TransportState {
   isPlaying: boolean;
   playheadBeats: number;
   isRepeat: boolean;
+  isSnapEnabled: boolean;
+  gridDivisionBeats: number;
   zoomLevel: number;
   selectionStart: number | null;
   selectionEnd: number | null;
@@ -15,6 +17,8 @@ interface TransportState {
   stop: () => void;
   setPlayheadBeats: (beats: number) => void;
   toggleRepeat: () => void;
+  toggleSnap: () => void;
+  setGridDivisionBeats: (division: number) => void;
   setZoomLevel: (zoomLevel: number) => void;
   setSelection: (start: number | null, end: number | null) => void;
   clearSelection: () => void;
@@ -23,6 +27,8 @@ interface TransportState {
     bpm: number;
     playheadBeats: number;
     isRepeat: boolean;
+    isSnapEnabled?: boolean;
+    gridDivisionBeats?: number;
     zoomLevel: number;
     selectionStart: number | null;
     selectionEnd: number | null;
@@ -35,6 +41,8 @@ export const useTransportStore = create<TransportState>((set) => ({
   isPlaying: false,
   playheadBeats: 0,
   isRepeat: false,
+  isSnapEnabled: true,
+  gridDivisionBeats: 1,
   zoomLevel: 1,
   selectionStart: null,
   selectionEnd: null,
@@ -45,6 +53,8 @@ export const useTransportStore = create<TransportState>((set) => ({
   stop: () => set({ isPlaying: false, playheadBeats: 0 }),
   setPlayheadBeats: (playheadBeats) => set({ playheadBeats }),
   toggleRepeat: () => set((state) => ({ isRepeat: !state.isRepeat })),
+  toggleSnap: () => set((state) => ({ isSnapEnabled: !state.isSnapEnabled })),
+  setGridDivisionBeats: (gridDivisionBeats) => set({ gridDivisionBeats }),
   setZoomLevel: (zoomLevel) => set({ zoomLevel: Math.max(0.1, Math.min(10, zoomLevel)) }),
   setSelection: (start, end) => set({ selectionStart: start, selectionEnd: end }),
   clearSelection: () => set({ selectionStart: null, selectionEnd: null }),
@@ -53,6 +63,8 @@ export const useTransportStore = create<TransportState>((set) => ({
     bpm: state.bpm,
     playheadBeats: state.playheadBeats,
     isRepeat: state.isRepeat,
+    isSnapEnabled: state.isSnapEnabled ?? true,
+    gridDivisionBeats: state.gridDivisionBeats ?? 1,
     zoomLevel: state.zoomLevel,
     selectionStart: state.selectionStart,
     selectionEnd: state.selectionEnd,

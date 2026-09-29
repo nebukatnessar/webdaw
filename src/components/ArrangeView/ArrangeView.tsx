@@ -24,6 +24,8 @@ export default function ArrangeView({ scrollRef, onScroll }: Props) {
   const createTracksForClips = useTrackStore((s) => s.createTracksForClips);
   const playheadBeats = useTransportStore((s) => s.playheadBeats);
   const isPlaying = useTransportStore((s) => s.isPlaying);
+  const isSnapEnabled = useTransportStore((s) => s.isSnapEnabled);
+  const gridDivisionBeats = useTransportStore((s) => s.gridDivisionBeats);
   const pixelsPerBeat = usePixelsPerBeat();
   const setZoomLevel = useTransportStore((s) => s.setZoomLevel);
   const selectionStart = useTransportStore((s) => s.selectionStart);
@@ -83,11 +85,17 @@ export default function ArrangeView({ scrollRef, onScroll }: Props) {
       (f) => f.type.startsWith('audio/') || f.name.toLowerCase().endsWith('.wav'),
     );
     if (audioFiles.length === 0) return;
-    // Use x position on the timeline (snapped to bar)
+    // Use x position on the timeline
     const scroll = scrollRef.current!;
     const rect = scroll.getBoundingClientRect();
     const contentX = e.clientX - rect.left + scroll.scrollLeft;
-    const startBeat = Math.round((contentX / pixelsPerBeat) / BEATS_PER_BAR) * BEATS_PER_BAR;
+    let startBeat = contentX / pixelsPerBeat;
+    
+    // Apply snapping if enabled
+    if (isSnapEnabled) {
+      startBeat = Math.round(startBeat / gridDivisionBeats) * gridDivisionBeats;
+    }
+    
     void Promise.all(
       audioFiles.map(async (file) => {
         const buffer = await engine.decodeFile(file);
@@ -121,9 +129,11 @@ export default function ArrangeView({ scrollRef, onScroll }: Props) {
     );
     if (audioFiles.length === 0) return;
 
-    // Snap current playhead to nearest bar — this is the shared start for all clips
-    const startBeat =
-      Math.round(useTransportStore.getState().playheadBeats / BEATS_PER_BAR) * BEATS_PER_BAR;
+    // Snap current playhead to nearest grid division if snap is enabled
+    let startBeat = playheadBeats;
+    if (isSnapEnabled) {
+      startBeat = Math.round(startBeat / gridDivisionBeats) * gridDivisionBeats;
+    }
 
     void Promise.all(
       audioFiles.map(async (file) => {
@@ -170,10 +180,14 @@ export default function ArrangeView({ scrollRef, onScroll }: Props) {
     if (clipId) {
       const sourceTrackId = e.dataTransfer.getData('text/x-clip-track-id');
       const beatOffset = parseFloat(e.dataTransfer.getData('text/x-clip-beat-offset') || '0');
-      const rawBeat = Math.max(0, contentX / pixelsPerBeat - beatOffset);
-      // Snap to nearest bar
-      const newStartBeat = Math.round(rawBeat / BEATS_PER_BAR) * BEATS_PER_BAR;
-      moveClip(clipId, sourceTrackId, trackId, newStartBeat);
+      let rawBeat = Math.max(0, contentX / pixelsPerBeat - beatOffset);
+      
+      // Apply snapping if enabled
+      if (isSnapEnabled) {
+        rawBeat = Math.round(rawBeat / gridDivisionBeats) * gridDivisionBeats;
+      }
+      
+      moveClip(clipId, sourceTrackId, trackId, rawBeat);
       return;
     }
 
@@ -182,8 +196,11 @@ export default function ArrangeView({ scrollRef, onScroll }: Props) {
     if (!file) return;
     if (!file.type.startsWith('audio/') && !file.name.toLowerCase().endsWith('.wav')) return;
 
-    // Snap to nearest bar
-    const startBeat = Math.round((contentX / pixelsPerBeat) / BEATS_PER_BAR) * BEATS_PER_BAR;
+    // Apply snapping if enabled
+    let startBeat = contentX / pixelsPerBeat;
+    if (isSnapEnabled) {
+      startBeat = Math.round(startBeat / gridDivisionBeats) * gridDivisionBeats;
+    }
 
     void engine.decodeFile(file).then((buffer) => {
       const bufferId = `buf-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
@@ -249,7 +266,7 @@ export default function ArrangeView({ scrollRef, onScroll }: Props) {
               >
                 {dragOverTrackId === '__empty__'
                   ? 'Release to create tracks'
-                  : 'Drop audio files here to create tracks · or use “+ Track” above'}
+                  : 'Drop audio files here to create tracks · or use "+ Track" above'}
               </div>
             )}
 

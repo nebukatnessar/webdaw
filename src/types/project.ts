@@ -11,6 +11,8 @@ export interface ProjectTransportState {
   bpm: number;
   playheadBeats: number;
   isRepeat: boolean;
+  isSnapEnabled?: boolean;
+  gridDivisionBeats?: number;
   zoomLevel: number;
   selectionStart: number | null;
   selectionEnd: number | null;

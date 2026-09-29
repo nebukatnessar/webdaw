@@ -73,6 +73,8 @@ export function createProjectFromState(
     bpm: number;
     playheadBeats: number;
     isRepeat: boolean;
+    isSnapEnabled?: boolean;
+    gridDivisionBeats?: number;
     zoomLevel: number;
     selectionStart: number | null;
     selectionEnd: number | null;
@@ -87,6 +89,8 @@ export function createProjectFromState(
       bpm: transportState.bpm,
       playheadBeats: transportState.playheadBeats,
       isRepeat: transportState.isRepeat,
+      isSnapEnabled: transportState.isSnapEnabled,
+      gridDivisionBeats: transportState.gridDivisionBeats,
       zoomLevel: transportState.zoomLevel,
       selectionStart: transportState.selectionStart,
       selectionEnd: transportState.selectionEnd,
