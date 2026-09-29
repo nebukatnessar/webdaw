@@ -62,11 +62,9 @@ function App() {
         </div>
       )}
       <TransportBar />
-      <div className={styles.main}>
-        <div className={styles.workspace}>
-          <TrackHeaderList scrollRef={headerRef} onScroll={onHeaderScroll} />
-          <ArrangeView scrollRef={arrangeRef} onScroll={onArrangeScroll} />
-        </div>
+      <div className={styles.workspace}>
+        <TrackHeaderList scrollRef={headerRef} onScroll={onHeaderScroll} />
+        <ArrangeView scrollRef={arrangeRef} onScroll={onArrangeScroll} />
         <MasterFader />
       </div>
     </div>

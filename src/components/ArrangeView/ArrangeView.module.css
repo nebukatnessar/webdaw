@@ -1,4 +1,5 @@
 .outer {
+  overflow: hidden;
   flex: 1;
   display: flex;
   flex-direction: column;
@@ -7,6 +8,7 @@
 }
 
 .scroll {
+  width: 100%;
   flex: 1;
   overflow-x: auto;
   overflow-y: auto;
