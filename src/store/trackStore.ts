@@ -729,7 +729,7 @@ export const useTrackStore = create<TrackState>((set) => ({
       let newActiveTrackId = state.activeTrackId;
       let newSelectedTrackIds = state.selectedTrackIds.filter((id) => !selectedIds.has(id));
       
-      if (selectedIds.has(state.activeTrackId)) {
+      if (state.activeTrackId !== null && selectedIds.has(state.activeTrackId)) {
         newActiveTrackId = null;
         newSelectedTrackIds = [];
         if (newTracks.length > 0) {

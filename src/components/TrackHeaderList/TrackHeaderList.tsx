@@ -20,7 +20,7 @@ function formatPan(pan: number): string {
 }
 
 export default function TrackHeaderList({ scrollRef, onScroll }: Props) {
-  const { tracks, updateTrack, removeTrack, selectedTrackIds, activeTrackId, selectTrack } = useTrackStore();
+  const { tracks, updateTrack, selectedTrackIds, activeTrackId, selectTrack } = useTrackStore();
   const createTracksForClips = useTrackStore((s) => s.createTracksForClips);
   const toggleArmSelected = useTrackStore((s) => s.toggleArmSelected);
   const toggleMuteSelected = useTrackStore((s) => s.toggleMuteSelected);
