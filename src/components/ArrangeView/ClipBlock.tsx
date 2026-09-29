@@ -85,4 +85,3 @@ function drawWaveform(canvas: HTMLCanvasElement, buffer: AudioBuffer, clip: Clip
     ctx.fillRect(x, yTop, 1, Math.max(1, yBot - yTop));
   }
 }
-

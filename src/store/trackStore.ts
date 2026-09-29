@@ -57,8 +57,7 @@ function splitClipsAtBoundary(tracks: Track[], boundaryBeat: number): Track[] {
   return tracks.map((track) => {
     const newClips: Clip[] = [];
     for (const clip of track.clips) {
-      const 
-clipStart = clip.startBeat;
+      const clipStart = clip.startBeat;
       const clipEnd = clip.startBeat + clip.durationBeats;
       
       // Check if the boundary is strictly inside the clip
@@ -120,8 +119,7 @@ export const useTrackStore = create<TrackState>((set) => ({
       const currentActiveIndex = state.activeTrackId ? findTrackIndex(tracks, state.activeTrackId) : -1;
       const clickedIndex = findTrackIndex(tracks, id);
       
-      if
- (clickedIndex === -1) {
+      if (clickedIndex === -1) {
         // Clicked track doesn't exist, do nothing
         return state;
       }
@@ -182,8 +180,7 @@ export const useTrackStore = create<TrackState>((set) => ({
         return state;
       }
 
-      // Active t
-rack must always be in the selection
+      // Active track must always be in the selection
       let newSelectedTrackIds = [...state.selectedTrackIds];
       if (!newSelectedTrackIds.includes(id)) {
         newSelectedTrackIds = [id];
@@ -247,8 +244,7 @@ rack must always be in the selection
           newSelectedTrackIds = [newActiveTrackId];
         } else {
           newActiveTrackId = null;
-          newSelectedTrackIds
- = [];
+          newSelectedTrackIds = [];
         }
       } else if (newSelectedTrackIds.length === 0 && newTracks.length > 0) {
         // If selection is empty but tracks remain, select the first track
@@ -317,8 +313,7 @@ rack must always be in the selection
             return { ...t, clips: t.clips.filter((c) => c.id !== clipId) };
           }
           if (t.id === toTrackId && t.id !== fromTrackId) {
-            return { ..
-.t, clips: [...t.clips, moving!] };
+            return { ...t, clips: [...t.clips, moving!] };
           }
           if (t.id === fromTrackId && t.id === toTrackId) {
             // Same track: replace in-place
@@ -385,7 +380,6 @@ rack must always be in the selection
   splitClipsAt: (beats: number[]) =>
     set((state) => {
       // Push current state to undo stack
-
       pushToUndoStack(state.tracks);
       
       // Apply splits sequentially for each boundary
@@ -413,4 +407,3 @@ rack must always be in the selection
 
   clearTracks: () => set({ tracks: [], selectedTrackIds: [], activeTrackId: null }),
 }));
-

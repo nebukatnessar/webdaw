@@ -61,8 +61,7 @@ function getMasterGainNode(ctx: AudioContext): GainNode {
 }
 
 export function setMasterVolume(volume: number): void {
-  getMasterGai
-nNode(getAudioContext()).gain.value = volume;
+  getMasterGainNode(getAudioContext()).gain.value = volume;
 }
 
 /**
@@ -110,8 +109,7 @@ function getOrCreateTrackNodes(ctx: AudioContext, trackId: string) {
  * Instantaneous RMS level (0-1) of a track's post-fader signal - meant to be
  * polled on a rAF loop to drive that track's VU meter. Returns 0 until the
  * track's nodes have been created (e.g. before it's ever been part of a
- * sche
-dulePlayback/updateLiveTrackParams call).
+ * schedulePlayback/updateLiveTrackParams call).
  */
 export function getTrackLevel(trackId: string): number {
   const analyser = trackAnalysers.get(trackId);
@@ -160,8 +158,7 @@ export function updateLiveTrackParams(tracks: Track[]): void {
     // Disconnect existing connections to rebuild the effect chain
     gainNode.disconnect();
 
-    // Build the effect chain: g
-ain -> gate -> eq -> compressor -> delay -> reverb -> panner
+    // Build the effect chain: gain -> gate -> eq -> compressor -> delay -> reverb -> panner
     // Standard signal processing order: dynamics -> EQ -> time-based effects
     let currentNode: AudioNode = gainNode;
 
@@ -224,8 +221,7 @@ export function storeBuffer(id: string, buffer: AudioBuffer): void {
   void cacheBuffer(id, buffer);
 }
 
-export function getBuffer(id: string
-): AudioBuffer | undefined {
+export function getBuffer(id: string): AudioBuffer | undefined {
   return bufferMap.get(id);
 }
 
@@ -284,8 +280,7 @@ export function schedulePlayback(
       // Calculate the offset within the buffer to start playback
       const offset = bufferOffsetSecs + Math.max(0, playheadSecs - clipStartSecs);
       
-      // Calcu
-late when to start playback
+      // Calculate when to start playback
       const when = now + Math.max(0, clipStartSecs - playheadSecs);
       
       // Calculate duration of playback, clamped to the clip's window
@@ -345,7 +340,6 @@ export function startPlaybackAt(tracks: Track[], beats: number, bpm: number): vo
  */
 export function seekDuringPlayback(tracks: Track[], beats: number, bpm: number): void {
   stopAllSources();
-
   startPlaybackAt(tracks, beats, bpm);
 }
 
@@ -368,4 +362,3 @@ export function computePlayheadBeats(bpm: number): number {
   const elapsed = ctx.currentTime - anchorCtxTime;
   return anchorBeats + (elapsed * bpm) / 60;
 }
-
