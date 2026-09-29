@@ -33,11 +33,12 @@ interface TrackState {
   ) => void;
   splitClipsAt: (beats: number[], trackIds?: string[]) => void;
   undoSplit: () => void;
+  trimClip: (clipId: string, patch: { startBeat: number; bufferOffsetBeats: number; durationBeats: number }) => void;
 }
 
 let trackCounter = 0;
 
-// Undo stack for split operations only
+// Undo stack for split and trim operations
 const undoStack: Track[][] = [];
 const MAX_UNDO_STACK = 50;
 
@@ -111,6 +112,21 @@ function getNearestTrackIndex(tracks: Track[], removedIndex: number): number | n
   // If it was the only track, return null (handled by clearTracks)
   return null;
 }
+
+// Helper to find a clip by ID across all tracks
+function findClipAndTrack(tracks: Track[], clipId: string): { clip: Clip; track: Track; trackIndex: number } | null {
+  for (let i = 0; i < tracks.length; i++) {
+    const track = tracks[i];
+    const clip = track.clips.find((c) => c.id === clipId);
+    if (clip) {
+      return { clip, track, trackIndex: i };
+    }
+  }
+  return null;
+}
+
+// Minimum clip length in beats
+const MIN_CLIP_BEATS = 0.05;
 
 export const useTrackStore = create<TrackState>((set) => ({
   tracks: [],
@@ -426,6 +442,66 @@ export const useTrackStore = create<TrackState>((set) => ({
       if (undoStack.length === 0) return state;
       const previousTracks = undoStack.pop()!;
       return { tracks: previousTracks };
+    }),
+
+  trimClip: (clipId, patch) =>
+    set((state) => {
+      // Find the clip and its track
+      const result = findClipAndTrack(state.tracks, clipId);
+      if (!result) {
+        console.warn(`trimClip: clip ${clipId} not found`);
+        return state;
+      }
+      
+      const { clip, track, trackIndex } = result;
+      
+      // Check if the patch would result in an invalid clip
+      const newDuration = patch.durationBeats;
+      const newBufferOffset = patch.bufferOffsetBeats ?? clip.bufferOffsetBeats ?? 0;
+      
+      // Validate minimum duration
+      if (newDuration < MIN_CLIP_BEATS) {
+        console.warn(`trimClip: resulting duration ${newDuration} is below minimum ${MIN_CLIP_BEATS}`);
+        return state;
+      }
+      
+      // Validate buffer offset is non-negative
+      if (newBufferOffset < 0) {
+        console.warn(`trimClip: bufferOffsetBeats ${newBufferOffset} is negative`);
+        return state;
+      }
+      
+      // Check if the patch actually changes anything
+      const noChange = 
+        patch.startBeat === clip.startBeat &&
+        (patch.bufferOffsetBeats ?? clip.bufferOffsetBeats) === (clip.bufferOffsetBeats ?? 0) &&
+        patch.durationBeats === clip.durationBeats;
+      
+      if (noChange) {
+        // No change, don't push to undo stack
+        return state;
+      }
+      
+      // Push current state to undo stack
+      pushToUndoStack(state.tracks);
+      
+      // Apply the patch to the clip
+      const newClip: Clip = {
+        ...clip,
+        startBeat: patch.startBeat,
+        bufferOffsetBeats: patch.bufferOffsetBeats,
+        durationBeats: patch.durationBeats,
+      };
+      
+      // Create new tracks array with the updated clip
+      const newTracks = [...state.tracks];
+      const newTrack = {
+        ...track,
+        clips: track.clips.map((c) => (c.id === clipId ? newClip : c)),
+      };
+      newTracks[trackIndex] = newTrack;
+      
+      return { tracks: newTracks };
     }),
 
   setTracks: (tracks) => {

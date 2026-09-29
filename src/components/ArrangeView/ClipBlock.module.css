@@ -13,6 +13,10 @@
   background: var(--bg-3);
 }
 
+.clip:hover {
+  cursor: grab;
+}
+
 .name {
   font-size: 11px;
   color: var(--text);
@@ -31,4 +35,32 @@
   flex: 1;
   pointer-events: none;
   /* Canvas element stretches to fill; actual pixel dims set via props */
+}
+
+/* Trim handles */
+.trimHandleL,
+.trimHandleR {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 6px;
+  background: transparent;
+  cursor: ew-resize;
+  z-index: 10;
+  opacity: 0;
+  transition: opacity 0.15s ease;
+}
+
+.clip:hover .trimHandleL,
+.clip:hover .trimHandleR {
+  opacity: 1;
+  background: rgba(255, 255, 255, 0.2);
+}
+
+.trimHandleL {
+  left: 0;
+}
+
+.trimHandleR {
+  right: 0;
 }
