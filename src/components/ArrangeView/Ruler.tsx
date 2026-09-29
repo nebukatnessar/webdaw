@@ -17,6 +17,7 @@ export default function Ruler({ scrollRef, pixelsPerBeat, totalBars }: Props) {
   const setPlayheadBeats = useTransportStore((s) => s.setPlayheadBeats);
   const setSelection = useTransportStore((s) => s.setSelection);
   const clearSelection = useTransportStore((s) => s.clearSelection);
+  const gridDivisionBeats = useTransportStore((s) => s.gridDivisionBeats);
 
   // Relocating the playhead used to always pause playback. Instead, if
   // something's already playing, reschedule from the new position so
@@ -145,6 +146,12 @@ export default function Ruler({ scrollRef, pixelsPerBeat, totalBars }: Props) {
     // Don't create or clear selection on simple click
   }, [scrollRef, pixelsPerBeat, relocatePlayhead]);
 
+  // Compute the width of a bar in pixels
+  const barWidth = BEATS_PER_BAR * pixelsPerBeat;
+
+  // Number of subdivisions per beat (rounded to nearest integer)
+  const subdivisionsPerBeat = Math.round(1 / gridDivisionBeats);
+
   return (
     <div 
       className={styles.ruler}
@@ -155,14 +162,62 @@ export default function Ruler({ scrollRef, pixelsPerBeat, totalBars }: Props) {
       onMouseLeave={handleMouseLeave}
       style={{ cursor: isDragging ? 'ew-resize' : 'pointer' }}
     >
+      {/* Bar labels */}
       {bars.map((bar) => (
-        <div
-          key={bar}
+        <div 
+          key={`bar-label-${bar}`}
           className={styles.rulerCell}
-          style={{ left: bar * BEATS_PER_BAR * pixelsPerBeat }}
+          style={{ left: bar * barWidth }}
         >
           {bar + 1}
         </div>
+      ))}
+
+      {/* Beat ticks */}
+      {bars.map((bar) => (
+        Array.from({ length: BEATS_PER_BAR }, (_, beat) => {
+          // Skip the first beat of each bar (it's covered by the bar tick)
+          if (beat === 0) return null;
+          const left = (bar * BEATS_PER_BAR + beat) * pixelsPerBeat;
+          return (
+            <div 
+              key={`beat-tick-${bar}-${beat}`}
+              className={styles.rulerTickBeat}
+              style={{ left }}
+            />
+          );
+        })
+      ))}
+
+      {/* Subdivision ticks */}
+      {bars.map((bar) => (
+        Array.from({ length: BEATS_PER_BAR }, (_, beat) => {
+          const subTicks = [];
+          // Only render subdivision ticks if gridDivisionBeats is finer than a beat
+          if (gridDivisionBeats < 1) {
+            for (let sub = 1; sub < subdivisionsPerBeat; sub++) {
+              const subBeat = beat + sub * gridDivisionBeats;
+              const left = (bar * BEATS_PER_BAR + subBeat) * pixelsPerBeat;
+              subTicks.push(
+                <div 
+                  key={`sub-tick-${bar}-${beat}-${sub}`}
+                  className={styles.rulerTickSub}
+                  style={{ left }}
+                />
+              );
+            }
+          }
+          return subTicks;
+        })
+      ))}
+
+      {/* Bar start ticks (tallest) */}
+      {bars.map((bar) => (
+        <div 
+          key={`bar-tick-${bar}`}
+          className={styles.rulerTickBar}
+          style={{ left: bar * barWidth }}
+        />
       ))}
     </div>
   );

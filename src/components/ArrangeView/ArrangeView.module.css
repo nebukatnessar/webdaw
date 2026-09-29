@@ -35,7 +35,6 @@
   position: absolute;
   top: 0;
   height: 100%;
-  width: 160px; /* BEATS_PER_BAR * PIXELS_PER_BEAT */
   border-left: 1px solid var(--border);
   display: flex;
   align-items: center;
@@ -43,6 +42,34 @@
   font-size: 10px;
   color: var(--text-dim);
   user-select: none;
+  pointer-events: none;
+}
+
+/* Ruler tick marks */
+.rulerTickBar {
+  position: absolute;
+  top: 0;
+  height: 100%;
+  width: 1px;
+  background: var(--border);
+  pointer-events: none;
+}
+
+.rulerTickBeat {
+  position: absolute;
+  top: 0;
+  height: 60%;
+  width: 1px;
+  background: var(--border);
+  pointer-events: none;
+}
+
+.rulerTickSub {
+  position: absolute;
+  top: 0;
+  height: 30%;
+  width: 1px;
+  background: var(--border);
   pointer-events: none;
 }
 
