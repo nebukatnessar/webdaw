@@ -49,6 +49,7 @@ export interface SerializedClip {
   durationBeats: number;
   name: string;
   color: string;
+  bufferOffsetBeats: number;
   audioFile: string | null; // Relative path to audio file, e.g., "audio/clip1.wav"
   // Session-scoped id into the in-memory audio buffer cache. Only meaningful
   // for the localStorage auto-save round-trip (restoring across a refresh

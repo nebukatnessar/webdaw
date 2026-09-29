@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import type { Track } from '../types/daw';
+import type { Track, Clip } from '../types/daw';
 import { getDefaultCompressorSettings } from '../audio/compressor';
 import { getDefaultGateSettings } from '../audio/gate';
 import { getDefaultEQSettings } from '../audio/eq';
@@ -26,9 +26,61 @@ interface TrackState {
     clips: Array<{ name: string; durationBeats: number; audioBufferId: string }>,
     startBeat: number,
   ) => void;
+  splitClipsAt: (beats: number[]) => void;
+  undoSplit: () => void;
 }
 
 let trackCounter = 0;
+
+// Undo stack for split operations only
+const undoStack: Track[][] = [];
+const MAX_UNDO_STACK = 50;
+
+function pushToUndoStack(tracks: Track[]): void {
+  undoStack.push(JSON.parse(JSON.stringify(tracks)));
+  if (undoStack.length > MAX_UNDO_STACK) {
+    undoStack.shift();
+  }
+}
+
+function generateClipId(): string {
+  return `clip-${Date.now()}-${Math.random().toString(36).substring(2, 8)}`;
+}
+
+// Helper function to split clips at a single boundary
+function splitClipsAtBoundary(tracks: Track[], boundaryBeat: number): Track[] {
+  return tracks.map((track) => {
+    const newClips: Clip[] = [];
+    for (const clip of track.clips) {
+      const clipStart = clip.startBeat;
+      const clipEnd = clip.startBeat + clip.durationBeats;
+      
+      // Check if the boundary is strictly inside the clip
+      if (clipStart < boundaryBeat && boundaryBeat < clipEnd) {
+        // Create left clip
+        const leftClip: Clip = {
+          ...clip,
+          durationBeats: boundaryBeat - clipStart,
+        };
+        newClips.push(leftClip);
+        
+        // Create right clip
+        const rightClip: Clip = {
+          ...clip,
+          id: generateClipId(),
+          startBeat: boundaryBeat,
+          bufferOffsetBeats: (clip.bufferOffsetBeats ?? 0) + (boundaryBeat - clipStart),
+          durationBeats: clipEnd - boundaryBeat,
+        };
+        newClips.push(rightClip);
+      } else {
+        // No split needed for this clip
+        newClips.push(clip);
+      }
+    }
+    return { ...track, clips: newClips };
+  });
+}
 
 export const useTrackStore = create<TrackState>((set) => ({
   tracks: [],
@@ -73,7 +125,7 @@ export const useTrackStore = create<TrackState>((set) => ({
               clips: [
                 ...t.clips,
                 {
-                  id: `clip-${Date.now()}`,
+                  id: generateClipId(),
                   trackId,
                   startBeat,
                   durationBeats,
@@ -128,7 +180,7 @@ export const useTrackStore = create<TrackState>((set) => ({
           color,
           clips: [
             {
-              id: `clip-${now}-${i}`,
+              id: generateClipId(),
               trackId,
               startBeat,
               durationBeats: data.durationBeats,
@@ -144,6 +196,26 @@ export const useTrackStore = create<TrackState>((set) => ({
         };
       });
       return { tracks: [...state.tracks, ...newTracks] };
+    }),
+
+  splitClipsAt: (beats: number[]) =>
+    set((state) => {
+      // Push current state to undo stack
+      pushToUndoStack(state.tracks);
+      
+      // Apply splits sequentially for each boundary
+      let newTracks = [...state.tracks];
+      for (const boundary of beats) {
+        newTracks = splitClipsAtBoundary(newTracks, boundary);
+      }
+      return { tracks: newTracks };
+    }),
+
+  undoSplit: () =>
+    set((state) => {
+      if (undoStack.length === 0) return state;
+      const previousTracks = undoStack.pop()!;
+      return { tracks: previousTracks };
     }),
 
   setTracks: (tracks) => set({ tracks }),

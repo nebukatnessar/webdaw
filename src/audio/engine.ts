@@ -1,4 +1,4 @@
-import type { Track } from '../types/daw';
+import type { Track, Clip } from '../types/daw';
 import { cacheBuffer } from './bufferCache';
 import { useTrackStore } from '../store/trackStore';
 import { rmsFromAnalyser } from './meterUtils';
@@ -256,13 +256,24 @@ export function schedulePlayback(
       // All timing computed in seconds to avoid BPM drift issues
       const clipStartSecs = clip.startBeat * beatsToSecs;
       const playheadSecs = playheadBeats * beatsToSecs;
-      const clipEndSecs = clipStartSecs + buffer.duration;
+      const clipEndSecs = clipStartSecs + clip.durationBeats * beatsToSecs;
 
       if (clipEndSecs <= playheadSecs) continue; // already ended
 
-      const offset = Math.max(0, playheadSecs - clipStartSecs);
+      // Calculate buffer offset in seconds
+      const bufferOffsetSecs = (clip.bufferOffsetBeats ?? 0) * beatsToSecs;
+      
+      // Calculate the offset within the buffer to start playback
+      const offset = bufferOffsetSecs + Math.max(0, playheadSecs - clipStartSecs);
+      
+      // Calculate when to start playback
       const when = now + Math.max(0, clipStartSecs - playheadSecs);
-      const duration = buffer.duration - offset;
+      
+      // Calculate duration of playback, clamped to the clip's window
+      const duration = Math.min(
+        buffer.duration - bufferOffsetSecs,
+        clip.durationBeats * beatsToSecs - Math.max(0, playheadSecs - clipStartSecs)
+      );
 
       const source = ctx.createBufferSource();
       source.buffer = buffer;
