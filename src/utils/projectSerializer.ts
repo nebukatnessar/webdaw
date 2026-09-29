@@ -11,6 +11,7 @@ import { getDefaultCompressorSettings } from '../audio/compressor';
 import { getDefaultGateSettings } from '../audio/gate';
 import { getDefaultEQSettings } from '../audio/eq';
 import { getDefaultReverbSettings } from '../audio/reverb';
+import { getDefaultDelaySettings } from '../audio/delay';
 import type { ReverbRoomType } from '../types/daw';
 
 // Project version for forward compatibility
@@ -102,6 +103,7 @@ export function createProjectFromState(
       compressor: track.compressor || getDefaultCompressorSettings(),
       gate: track.gate || getDefaultGateSettings(),
       eq: track.eq || getDefaultEQSettings(),
+      delay: track.delay || getDefaultDelaySettings(),
       reverb: track.reverb || getDefaultReverbSettings(),
       clips: track.clips.map((clip) => ({
         id: clip.id,
@@ -133,6 +135,7 @@ export function convertToTracks(serializedTracks: SerializedTrack[]): Track[] {
     compressor: track.compressor || getDefaultCompressorSettings(),
     gate: track.gate || getDefaultGateSettings(),
     eq: track.eq || getDefaultEQSettings(),
+    delay: track.delay || getDefaultDelaySettings(),
     reverb: track.reverb ? { ...track.reverb, roomType: track.reverb.roomType as ReverbRoomType } : getDefaultReverbSettings(),
     clips: track.clips.map((clip) => ({
       id: clip.id,
