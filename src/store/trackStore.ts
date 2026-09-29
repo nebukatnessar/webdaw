@@ -57,7 +57,8 @@ function splitClipsAtBoundary(tracks: Track[], boundaryBeat: number): Track[] {
   return tracks.map((track) => {
     const newClips: Clip[] = [];
     for (const clip of track.clips) {
-      const clipStart = clip.startBeat;
+      const 
+clipStart = clip.startBeat;
       const clipEnd = clip.startBeat + clip.durationBeats;
       
       // Check if the boundary is strictly inside the clip
@@ -107,7 +108,7 @@ function getNearestTrackIndex(tracks: Track[], removedIndex: number): number | n
   return null;
 }
 
-export const useTrackStore = create<TrackState>((set, get) => ({
+export const useTrackStore = create<TrackState>((set) => ({
   tracks: [],
   selectedTrackIds: [],
   activeTrackId: null,
@@ -119,7 +120,8 @@ export const useTrackStore = create<TrackState>((set, get) => ({
       const currentActiveIndex = state.activeTrackId ? findTrackIndex(tracks, state.activeTrackId) : -1;
       const clickedIndex = findTrackIndex(tracks, id);
       
-      if (clickedIndex === -1) {
+      if
+ (clickedIndex === -1) {
         // Clicked track doesn't exist, do nothing
         return state;
       }
@@ -180,7 +182,8 @@ export const useTrackStore = create<TrackState>((set, get) => ({
         return state;
       }
 
-      // Active track must always be in the selection
+      // Active t
+rack must always be in the selection
       let newSelectedTrackIds = [...state.selectedTrackIds];
       if (!newSelectedTrackIds.includes(id)) {
         newSelectedTrackIds = [id];
@@ -244,7 +247,8 @@ export const useTrackStore = create<TrackState>((set, get) => ({
           newSelectedTrackIds = [newActiveTrackId];
         } else {
           newActiveTrackId = null;
-          newSelectedTrackIds = [];
+          newSelectedTrackIds
+ = [];
         }
       } else if (newSelectedTrackIds.length === 0 && newTracks.length > 0) {
         // If selection is empty but tracks remain, select the first track
@@ -294,12 +298,17 @@ export const useTrackStore = create<TrackState>((set, get) => ({
         ?.clips.find((c) => c.id === clipId);
       if (!moving) return state;
       moving = { ...moving, trackId: toTrackId, startBeat: newStartBeat };
-      
-      // Set the target track as active
-      const newActiveTrackId = toTrackId;
-      let newSelectedTrackIds = [...state.selectedTrackIds];
-      if (!newSelectedTrackIds.includes(newActiveTrackId)) {
-        newSelectedTrackIds = [newActiveTrackId];
+
+      // Dragging a clip to a *different* track makes that track active
+      // (last-interacted track is active, per #151). Dragging within the
+      // same track must NOT touch the selection at all.
+      let newActiveTrackId = state.activeTrackId;
+      let newSelectedTrackIds = state.selectedTrackIds;
+      if (fromTrackId !== toTrackId && state.activeTrackId !== toTrackId) {
+        newActiveTrackId = toTrackId;
+        newSelectedTrackIds = state.selectedTrackIds.includes(toTrackId)
+          ? state.selectedTrackIds
+          : [...state.selectedTrackIds, toTrackId];
       }
       
       return {
@@ -308,7 +317,8 @@ export const useTrackStore = create<TrackState>((set, get) => ({
             return { ...t, clips: t.clips.filter((c) => c.id !== clipId) };
           }
           if (t.id === toTrackId && t.id !== fromTrackId) {
-            return { ...t, clips: [...t.clips, moving!] };
+            return { ..
+.t, clips: [...t.clips, moving!] };
           }
           if (t.id === fromTrackId && t.id === toTrackId) {
             // Same track: replace in-place
@@ -357,9 +367,13 @@ export const useTrackStore = create<TrackState>((set, get) => ({
       });
       
       const allTracks = [...state.tracks, ...newTracks];
-      // Set the first new track as active and selected
-      const newActiveTrackId = newTracks.length > 0 ? newTracks[0].id : state.activeTrackId;
-      const newSelectedTrackIds = newTracks.length > 0 ? [newActiveTrackId] : state.selectedTrackIds;
+      // Set the first new track as active and selected. Explicit string[]
+      // typing keeps TS from widening newActiveTrackId to string | null and
+      // inferring (string | null)[] for the selection.
+      const newActiveTrackId: string | null =
+        newTracks.length > 0 ? newTracks[0].id : state.activeTrackId;
+      const newSelectedTrackIds: string[] =
+        newTracks.length > 0 ? [newTracks[0].id] : state.selectedTrackIds;
       
       return {
         tracks: allTracks,
@@ -371,6 +385,7 @@ export const useTrackStore = create<TrackState>((set, get) => ({
   splitClipsAt: (beats: number[]) =>
     set((state) => {
       // Push current state to undo stack
+
       pushToUndoStack(state.tracks);
       
       // Apply splits sequentially for each boundary
@@ -398,3 +413,4 @@ export const useTrackStore = create<TrackState>((set, get) => ({
 
   clearTracks: () => set({ tracks: [], selectedTrackIds: [], activeTrackId: null }),
 }));
+
