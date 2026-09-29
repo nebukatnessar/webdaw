@@ -149,8 +149,8 @@ export default function Ruler({ scrollRef, pixelsPerBeat, totalBars }: Props) {
   // Compute the width of a bar in pixels
   const barWidth = BEATS_PER_BAR * pixelsPerBeat;
 
-  // Number of subdivisions per beat
-  const subdivisionsPerBeat = 1 / gridDivisionBeats;
+  // Number of subdivisions per beat (rounded to nearest integer)
+  const subdivisionsPerBeat = Math.round(1 / gridDivisionBeats);
 
   return (
     <div 
