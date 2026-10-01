@@ -26,7 +26,9 @@ const PROJECTS_STORAGE_KEY = 'webdaw-projects';
 export function getProjectMetadataList(): ProjectMetadata[] {
   try {
     const stored = localStorage.getItem(PROJECTS_STORAGE_KEY);
-    return stored ? JSON.parse(stored) : [];
+    const list = stored ? JSON.parse(stored) : [];
+    // Most recently updated first
+    return [...list].sort((a, b) => (b.updatedAt ?? 0) - (a.updatedAt ?? 0));
   } catch {
     return [];
   }

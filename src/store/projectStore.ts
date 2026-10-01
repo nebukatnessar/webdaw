@@ -568,11 +568,25 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
     
     const content = await file.text();
     const serialized: SerializedProject = JSON.parse(content);
-    const tracks = convertToTracks(serialized.tracks);
     
-    // For imported projects, we need to load audio files
-    // This is tricky - for now, we'll just import the structure
-    // and let users re-import audio files
+    // Disk-first: if this project exists as a folder under the base
+    // directory, load it from there so the wav files come from disk
+    // instead of showing a structure-only import.
+    const baseDir = get().lastUsedDirectory;
+    if (baseDir) {
+      try {
+        const folderHandle = await baseDir.getDirectoryHandle(serialized.name);
+        console.log('[import] project folder found on disk, loading from:', folderHandle.name);
+        return await get().loadProject(folderHandle);
+      } catch {
+        console.warn(`[import] no folder named "${serialized.name}" under base directory - importing structure only (no audio)`);
+      }
+    } else {
+      console.warn('[import] no base directory available - importing structure only (no audio)');
+    }
+    
+    // Foreign project file with no folder on disk: structure only.
+    const tracks = convertToTracks(serialized.tracks);
     
     const now = Date.now();
     const projectName = serialized.name;
