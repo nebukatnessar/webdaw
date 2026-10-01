@@ -37,11 +37,9 @@ function App() {
   useEffect(() => {
     const unsubscribe = useProjectStore.subscribe(
       (state) => state.currentProjectId,
-      (currentProjectId) => {
-        if (currentProjectId) {
-          setNotification("Project saved successfully.");
-          setTimeout(() => setNotification(null), 3000);
-        }
+      () => {
+        setNotification("Project saved successfully.");
+        setTimeout(() => setNotification(null), 3000);
       }
     );
     
