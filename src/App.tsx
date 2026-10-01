@@ -17,7 +17,7 @@ function App() {
   const pendingReconnect = useProjectStore((s) => s.pendingReconnect);
   const reconnectProjectFolder = useProjectStore((s) => s.reconnectProjectFolder);
   const dismissReconnect = useProjectStore((s) => s.dismissReconnect);
-  
+
   const [toast, setToast] = useState<{ message: string; key: number } | null>(null);
 
   // Auto-restore last opened project on app startup (F5 refresh).
@@ -37,11 +37,13 @@ function App() {
   useEffect(() => {
     const unsubscribe = useProjectStore.subscribe(
       (state) => state.currentProjectId,
-      () => {
-        setToast({ message: "Project saved successfully", key: Date.now() });
+      (currentProjectId, previousProjectId) => {
+        if (currentProjectId !== previousProjectId) {
+          setToast({ message: "Project saved successfully", key: Date.now() });
+        }
       }
     );
-    
+
     return () => unsubscribe();
   }, []);
 
@@ -77,7 +79,7 @@ function App() {
         e.preventDefault();
         const { selectionStart, selectionEnd, playheadBeats } = useTransportStore.getState();
         const splitBeats: number[] = [];
-        
+
         if (selectionStart !== null && selectionEnd !== null) {
           // Split at both selection boundaries
           splitBeats.push(selectionStart, selectionEnd);
@@ -85,10 +87,10 @@ function App() {
           // Split at playhead position
           splitBeats.push(playheadBeats);
         }
-        
+
         useTrackStore.getState().splitClipsAt(splitBeats);
       }
-      
+
       // Handle undo split with Ctrl+Z or Cmd+Z
       if ((e.ctrlKey || e.metaKey) && e.key === 'z' && !e.shiftKey) {
         e.preventDefault();
