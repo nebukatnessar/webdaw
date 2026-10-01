@@ -28,10 +28,10 @@ interface ProjectState {
   // Current project
   currentProjectId: string | null;
   currentProjectName: string;
-  
+
   // Project file handles (for File System Access API)
   fileStructure: ProjectFileStructure | null;
-  
+
   // Remember the last directory used for saving (for OPFS persistence)
   lastUsedDirectory: FileSystemDirectoryHandle | null;
 
