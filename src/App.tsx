@@ -1,4 +1,4 @@
-import { useRef, useEffect } from 'react';
+import { useRef, useEffect, useState } from 'react';
 import styles from './App.module.css';
 import TransportBar from './components/TransportBar/TransportBar';
 import TrackHeaderList from './components/TrackHeaderList/TrackHeaderList';
@@ -16,20 +16,41 @@ function App() {
   const pendingReconnect = useProjectStore((s) => s.pendingReconnect);
   const reconnectProjectFolder = useProjectStore((s) => s.reconnectProjectFolder);
   const dismissReconnect = useProjectStore((s) => s.dismissReconnect);
-
-  // Auto-restore last opened project on app startup (F5 refresh). Reads the
-  // store via getState() rather than the reactive hook, with an empty
-  // dependency array, so restoreLastOpenedProject's own set() calls can't
-  // change this effect's inputs and retrigger it - which previously caused
-  // several concurrent restore attempts to stack up on every load.
+  
+  // State for UI feedback
+  const [showSaveFeedback, setShowSaveFeedback] = useState(false);
+  const [showRestoreFeedback, setShowRestoreFeedback] = useState(false);
+  const [feedbackMessage, setFeedbackMessage] = useState('');
+  
+  // Auto-restore last opened project on app startup
   useEffect(() => {
     const timer = setTimeout(() => {
-      useProjectStore.getState().restoreLastOpenedProject().catch((e) => {
+      useProjectStore.getState().restoreLastOpenedProject().then(() => {
+        setFeedbackMessage('Project restored successfully');
+        setShowRestoreFeedback(true);
+        setTimeout(() => setShowRestoreFeedback(false), 3000);
+      }).catch((e) => {
         console.log('Auto-restore of last project failed or was cancelled:', e);
       });
     }, 500);
-
+    
     return () => clearTimeout(timer);
+  }, []);
+  
+  // Listen for project save events
+  useEffect(() => {
+    const unsubscribe = useProjectStore.subscribe(
+      (state) => state.currentProjectId,
+      (currentProjectId, prevProjectId) => {
+        if (currentProjectId && currentProjectId !== prevProjectId) {
+          setFeedbackMessage('Project saved successfully');
+          setShowSaveFeedback(true);
+          setTimeout(() => setShowSaveFeedback(false), 3000);
+        }
+      }
+    );
+    
+    return () => unsubscribe();
   }, []);
 
   const onArrangeScroll = (e: React.UIEvent<HTMLDivElement>) => {
@@ -144,6 +165,19 @@ function App() {
           </button>
         </div>
       )}
+      
+      {showSaveFeedback && (
+        <div className={styles.feedbackBanner}>
+          <span>{feedbackMessage}</span>
+        </div>
+      )}
+      
+      {showRestoreFeedback && (
+        <div className={styles.feedbackBanner + ' ' + styles.restoreFeedback}>
+          <span>{feedbackMessage}</span>
+        </div>
+      )}
+      
       <TransportBar />
       <div className={styles.workspace}>
         <TrackHeaderList scrollRef={headerRef} onScroll={onHeaderScroll} />
