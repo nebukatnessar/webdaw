@@ -308,14 +308,25 @@ export const useTrackStore = create<TrackState>((set) => ({
       // Push current state to undo stack
       pushToUndoStack(state.tracks);
       
-      // Find the earliest clip in the clipboard to align with playhead
+      // Determine target tracks: selected tracks or active track
+      let targetTrackIds: string[];
+      if (state.selectedTrackIds.length > 0) {
+        targetTrackIds = state.selectedTrackIds;
+      } else if (state.activeTrackId) {
+        targetTrackIds = [state.activeTrackId];
+      } else {
+        // No tracks selected or active: fail silently
+        return state;
+      }
+
+      // Calculate the earliest clip in the clipboard to align with playhead
       const clipboardClips = [...state.clipboard];
       const earliestClip = clipboardClips.reduce((earliest, clip) =>
         (clip.startBeat < earliest.startBeat ? clip : earliest),
         clipboardClips[0]
       );
       const earliestStartBeat = earliestClip.startBeat;
-      
+
       // Create new clips with fresh IDs and adjusted positions
       const newClips: Clip[] = clipboardClips.map((clip) => {
         // Calculate relative offset from the earliest clip
@@ -326,33 +337,40 @@ export const useTrackStore = create<TrackState>((set) => ({
           ...clip,
           id: generateClipId(),
           startBeat: newStartBeat,
+          // Remove trackId to reassign later
+          trackId: '',
         };
       });
-      
-      // Build a map of trackId -> clips to paste
-      const clipsByTrackId: Record<string, Clip[]> = {};
-      for (const clip of newClips) {
-        if (!clipsByTrackId[clip.trackId]) {
-          clipsByTrackId[clip.trackId] = [];
-        }
-        clipsByTrackId[clip.trackId].push(clip);
+
+      // Distribute clips across target tracks
+      const newTracks = [...state.tracks];
+      const clipsPerTrack = Math.ceil(newClips.length / targetTrackIds.length);
+
+      for (let i = 0; i < targetTrackIds.length; i++) {
+        const trackId = targetTrackIds[i];
+        const trackIndex = findTrackIndex(newTracks, trackId);
+        if (trackIndex === -1) continue; // Skip if track doesn't exist
+
+        const startIdx = i * clipsPerTrack;
+        const endIdx = startIdx + clipsPerTrack;
+        const clipsForTrack = newClips.slice(startIdx, endIdx);
+
+        // Assign clips to this track
+        const updatedClips = clipsForTrack.map((clip) => ({
+          ...clip,
+          trackId,
+          color: newTracks[trackIndex].color, // Use the track's color
+        }));
+
+        newTracks[trackIndex] = {
+          ...newTracks[trackIndex],
+          clips: [...newTracks[trackIndex].clips, ...updatedClips],
+        };
       }
-      
-      // Paste clips onto their original tracks if they still exist
-      const newTracks = state.tracks.map((track) => {
-        const clipsToPaste = clipsByTrackId[track.id];
-        if (!clipsToPaste) return track;
-        
-        // Paste clips onto this track
-        return {
-          ...track,
-          clips: [...track.clips, ...clipsToPaste],
-        };
-      });
-      
+
       // Select the newly pasted clips
       const newSelectedClipIds = newClips.map((clip) => clip.id);
-      
+
       return {
         tracks: newTracks,
         selectedClipIds: newSelectedClipIds,
@@ -516,7 +534,7 @@ export const useTrackStore = create<TrackState>((set) => ({
         newActiveTrackId = newTracks[0].id;
         newSelectedTrackIds = [newActiveTrackId];
       }
-
+      
       return {
         tracks: newTracks,
         selectedTrackIds: newSelectedTrackIds,
