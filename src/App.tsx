@@ -1,4 +1,4 @@
-import { useRef, useEffect } from 'react';
+import { useRef, useEffect, useState } from 'react';
 import styles from './App.module.css';
 import TransportBar from './components/TransportBar/TransportBar';
 import TrackHeaderList from './components/TrackHeaderList/TrackHeaderList';
@@ -7,6 +7,7 @@ import MasterFader from './components/MasterFader/MasterFader';
 import { useProjectStore } from './store/projectStore';
 import { useTrackStore } from './store/trackStore';
 import { useTransportStore } from './store/transportStore';
+import Toast from './components/Toast/Toast';
 
 function App() {
   const headerRef = useRef<HTMLDivElement>(null);
@@ -17,19 +18,32 @@ function App() {
   const reconnectProjectFolder = useProjectStore((s) => s.reconnectProjectFolder);
   const dismissReconnect = useProjectStore((s) => s.dismissReconnect);
 
-  // Auto-restore last opened project on app startup (F5 refresh). Reads the
-  // store via getState() rather than the reactive hook, with an empty
-  // dependency array, so restoreLastOpenedProject's own set() calls can't
-  // change this effect's inputs and retrigger it - which previously caused
-  // several concurrent restore attempts to stack up on every load.
+  const [toast, setToast] = useState<{ message: string; key: number } | null>(null);
+
+  // Auto-restore last opened project on app startup (F5 refresh).
   useEffect(() => {
     const timer = setTimeout(() => {
-      useProjectStore.getState().restoreLastOpenedProject().catch((e) => {
+      useProjectStore.getState().restoreLastOpenedProject().then(() => {
+        setToast({ message: "Project restored successfully", key: Date.now() });
+      }).catch((e) => {
         console.log('Auto-restore of last project failed or was cancelled:', e);
       });
     }, 500);
 
     return () => clearTimeout(timer);
+  }, []);
+
+  // Listen for project save events
+  useEffect(() => {
+    let previousSavedAt = useProjectStore.getState().lastSavedAt;
+    const unsubscribe = useProjectStore.subscribe((state) => {
+      if (state.lastSavedAt !== previousSavedAt) {
+        setToast({ message: "Project saved successfully", key: Date.now() });
+      }
+      previousSavedAt = state.lastSavedAt;
+    });
+
+    return () => unsubscribe();
   }, []);
 
   const onArrangeScroll = (e: React.UIEvent<HTMLDivElement>) => {
@@ -64,7 +78,7 @@ function App() {
         e.preventDefault();
         const { selectionStart, selectionEnd, playheadBeats } = useTransportStore.getState();
         const splitBeats: number[] = [];
-        
+
         if (selectionStart !== null && selectionEnd !== null) {
           // Split at both selection boundaries
           splitBeats.push(selectionStart, selectionEnd);
@@ -72,10 +86,10 @@ function App() {
           // Split at playhead position
           splitBeats.push(playheadBeats);
         }
-        
+
         useTrackStore.getState().splitClipsAt(splitBeats);
       }
-      
+
       // Handle undo split with Ctrl+Z or Cmd+Z
       if ((e.ctrlKey || e.metaKey) && e.key === 'z' && !e.shiftKey) {
         e.preventDefault();
@@ -150,6 +164,7 @@ function App() {
         <ArrangeView scrollRef={arrangeRef} onScroll={onArrangeScroll} />
         <MasterFader />
       </div>
+      {toast && <Toast message={toast.message} onClose={() => setToast(null)} key={toast.key} />}
     </div>
   );
 }

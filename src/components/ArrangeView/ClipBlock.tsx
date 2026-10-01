@@ -38,8 +38,6 @@ export default function ClipBlock({ clip }: Props) {
   // Ref to track if the current interaction is a drag (exceeded threshold)
   const isDraggingRef = useRef(false);
 
-  const width = Math.max(1, Math.round(clip.durationBeats * pixelsPerBeat));
-  console.log(`clip width: ${width}`);
   const isSelected = selectedClipIds.includes(clip.id);
 
   const handleDragStart = (e: React.DragEvent<HTMLDivElement>) => {

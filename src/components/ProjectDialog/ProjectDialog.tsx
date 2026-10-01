@@ -37,7 +37,6 @@ export default function ProjectDialog({ onClose, mode }: ProjectDialogProps) {
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
 
   // For load mode, we need to handle folder selection
-  const [showFolderPicker, setShowFolderPicker] = useState(false);
   const lastUsedDirectory = projectStore.getLastUsedDirectory();
 
   const handleSave = useCallback(async () => {
@@ -124,25 +123,44 @@ export default function ProjectDialog({ onClose, mode }: ProjectDialogProps) {
       }
     } finally {
       setIsLoading(false);
-      setShowFolderPicker(false);
     }
   }, [projectStore, setTracks, setTransportState, onClose]);
 
   const handleLoadFromList = useCallback(async (projectId: string) => {
     setIsLoading(true);
     setError(null);
-    
+    setSelectedProjectId(projectId);
+
     try {
-      // For now, we need to re-open the folder picker since we don't persist file handles
-      // In the future, we could use IndexedDB to store permissions
-      setSelectedProjectId(projectId);
-      setShowFolderPicker(true);
-    } catch (e) {
-      setError('Failed to load project');
+      // Disk-first: open the project's folder under the base directory
+      // so project.json and its wav files load from disk.
+      const project = projects.find((p) => p.id === projectId);
+      const baseDir = projectStore.getLastUsedDirectory();
+      if (!project || !baseDir) {
+        setError('Select the project folder below to load it');
+        return;
+      }
+      const folderHandle = await baseDir.getDirectoryHandle(project.name);
+      const { tracks: loadedTracks, transport } = await projectStore.loadProject(folderHandle);
+      setTracks(loadedTracks);
+      setTransportState({
+        bpm: transport.bpm,
+        playheadBeats: transport.playheadBeats,
+        isRepeat: transport.isRepeat,
+        zoomLevel: transport.zoomLevel,
+        selectionStart: transport.selectionStart,
+        selectionEnd: transport.selectionEnd,
+        masterVolume: transport.masterVolume,
+      });
+      onClose();
+    } catch (e: unknown) {
+      if ((e as Error).name !== 'AbortError') {
+        setError('Project folder not found - use "Select Project Folder" below');
+      }
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [projects, projectStore, setTracks, setTransportState, onClose]);
 
   const handleImport = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -303,18 +321,16 @@ export default function ProjectDialog({ onClose, mode }: ProjectDialogProps) {
               </label>
             </div>
 
-            {showFolderPicker && (
-              <div className={styles.folderPicker}>
-                <p>Please select the project folder containing project.json</p>
-                <button
-                  className={styles.openFolderBtn}
-                  onClick={handleLoadFromFolder}
-                  disabled={isLoading}
-                >
-                  {isLoading ? 'Loading...' : 'Select Project Folder'}
-                </button>
-              </div>
-            )}
+            <div className={styles.folderPicker}>
+              <p>Or select a project folder directly (loads project.json and audio from disk)</p>
+              <button
+                className={styles.openFolderBtn}
+                onClick={handleLoadFromFolder}
+                disabled={isLoading}
+              >
+                {isLoading ? 'Loading...' : 'Select Project Folder'}
+              </button>
+            </div>
 
             <div className={styles.actions}>
               <button className={styles.cancelBtn} onClick={onClose} disabled={isLoading}>
