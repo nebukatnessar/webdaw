@@ -7,6 +7,7 @@ import MasterFader from './components/MasterFader/MasterFader';
 import { useProjectStore } from './store/projectStore';
 import { useTrackStore } from './store/trackStore';
 import { useTransportStore } from './store/transportStore';
+import Toast from './components/Toast/Toast';
 
 function App() {
   const headerRef = useRef<HTMLDivElement>(null);
@@ -17,14 +18,13 @@ function App() {
   const reconnectProjectFolder = useProjectStore((s) => s.reconnectProjectFolder);
   const dismissReconnect = useProjectStore((s) => s.dismissReconnect);
   
-  const [notification, setNotification] = useState<string | null>(null);
+  const [toast, setToast] = useState<{ message: string; key: number } | null>(null);
 
-  // Auto-restore last opened project on app startup
+  // Auto-restore last opened project on app startup (F5 refresh).
   useEffect(() => {
     const timer = setTimeout(() => {
       useProjectStore.getState().restoreLastOpenedProject().then(() => {
-        setNotification("Project restored successfully.");
-        setTimeout(() => setNotification(null), 3000);
+        setToast({ message: "Project restored successfully", key: Date.now() });
       }).catch((e) => {
         console.log('Auto-restore of last project failed or was cancelled:', e);
       });
@@ -38,8 +38,7 @@ function App() {
     const unsubscribe = useProjectStore.subscribe(
       (state) => state.currentProjectId,
       () => {
-        setNotification("Project saved successfully.");
-        setTimeout(() => setNotification(null), 3000);
+        setToast({ message: "Project saved successfully", key: Date.now() });
       }
     );
     
@@ -147,11 +146,6 @@ function App() {
 
   return (
     <div className={styles.app}>
-      {notification && (
-        <div className={styles.notificationBanner}>
-          {notification}
-        </div>
-      )}
       {pendingReconnect && (
         <div className={styles.reconnectBanner}>
           <span>
@@ -169,6 +163,7 @@ function App() {
         <ArrangeView scrollRef={arrangeRef} onScroll={onArrangeScroll} />
         <MasterFader />
       </div>
+      {toast && <Toast message={toast.message} onClose={() => setToast(null)} key={toast.key} />}
     </div>
   );
 }
