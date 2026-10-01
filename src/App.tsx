@@ -36,15 +36,12 @@ function App() {
   // Listen for project save events
   useEffect(() => {
     let previousProjectId: string | null = useProjectStore.getState().currentProjectId;
-    const unsubscribe = useProjectStore.subscribe(
-      (state) => state.currentProjectId,
-      (currentProjectId: string | null) => {
-        if (currentProjectId !== previousProjectId) {
-          setToast({ message: "Project saved successfully", key: Date.now() });
-        }
-        previousProjectId = currentProjectId;
+    const unsubscribe = useProjectStore.subscribe((state) => {
+      if (state.currentProjectId !== previousProjectId) {
+        setToast({ message: "Project saved successfully", key: Date.now() });
       }
-    );
+      previousProjectId = state.currentProjectId;
+    });
 
     return () => unsubscribe();
   }, []);
