@@ -177,7 +177,7 @@ export const useTrackStore = create<TrackState>((set) => ({
       }
 
       let newSelectedTrackIds: string[];
-      let newActiveTrackId: string | null = id;
+      const newActiveTrackId: string | null = id;
 
       switch (mode) {
         case 'replace':
