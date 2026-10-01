@@ -17,35 +17,30 @@ function App() {
   const reconnectProjectFolder = useProjectStore((s) => s.reconnectProjectFolder);
   const dismissReconnect = useProjectStore((s) => s.dismissReconnect);
   
-  // State for UI feedback
-  const [showSaveFeedback, setShowSaveFeedback] = useState(false);
-  const [showRestoreFeedback, setShowRestoreFeedback] = useState(false);
-  const [feedbackMessage, setFeedbackMessage] = useState('');
-  
+  const [notification, setNotification] = useState<string | null>(null);
+
   // Auto-restore last opened project on app startup
   useEffect(() => {
     const timer = setTimeout(() => {
       useProjectStore.getState().restoreLastOpenedProject().then(() => {
-        setFeedbackMessage('Project restored successfully');
-        setShowRestoreFeedback(true);
-        setTimeout(() => setShowRestoreFeedback(false), 3000);
+        setNotification("Project restored successfully.");
+        setTimeout(() => setNotification(null), 3000);
       }).catch((e) => {
         console.log('Auto-restore of last project failed or was cancelled:', e);
       });
     }, 500);
-    
+
     return () => clearTimeout(timer);
   }, []);
-  
+
   // Listen for project save events
   useEffect(() => {
     const unsubscribe = useProjectStore.subscribe(
       (state) => state.currentProjectId,
-      (currentProjectId, prevProjectId) => {
-        if (currentProjectId && currentProjectId !== prevProjectId) {
-          setFeedbackMessage('Project saved successfully');
-          setShowSaveFeedback(true);
-          setTimeout(() => setShowSaveFeedback(false), 3000);
+      (currentProjectId) => {
+        if (currentProjectId) {
+          setNotification("Project saved successfully.");
+          setTimeout(() => setNotification(null), 3000);
         }
       }
     );
@@ -154,6 +149,11 @@ function App() {
 
   return (
     <div className={styles.app}>
+      {notification && (
+        <div className={styles.notificationBanner}>
+          {notification}
+        </div>
+      )}
       {pendingReconnect && (
         <div className={styles.reconnectBanner}>
           <span>
@@ -165,19 +165,6 @@ function App() {
           </button>
         </div>
       )}
-      
-      {showSaveFeedback && (
-        <div className={styles.feedbackBanner}>
-          <span>{feedbackMessage}</span>
-        </div>
-      )}
-      
-      {showRestoreFeedback && (
-        <div className={styles.feedbackBanner + ' ' + styles.restoreFeedback}>
-          <span>{feedbackMessage}</span>
-        </div>
-      )}
-      
       <TransportBar />
       <div className={styles.workspace}>
         <TrackHeaderList scrollRef={headerRef} onScroll={onHeaderScroll} />
