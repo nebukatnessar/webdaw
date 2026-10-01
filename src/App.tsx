@@ -163,7 +163,7 @@ function App() {
         <ArrangeView scrollRef={arrangeRef} onScroll={onArrangeScroll} />
         <MasterFader />
       </div>
-      {toast && <Toast {...toast} onClose={() => setToast(null)} />}
+      {toast && <Toast message={toast.message} onClose={() => setToast(null)} />}
     </div>
   );
 }
