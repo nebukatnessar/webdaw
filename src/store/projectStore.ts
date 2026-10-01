@@ -170,6 +170,8 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
             bpm: serialized.transport.bpm,
             playheadBeats: serialized.transport.playheadBeats,
             isRepeat: serialized.transport.isRepeat,
+            isSnapEnabled: serialized.transport.isSnapEnabled,
+            gridDivisionBeats: serialized.transport.gridDivisionBeats,
             zoomLevel: serialized.transport.zoomLevel,
             selectionStart: serialized.transport.selectionStart,
             selectionEnd: serialized.transport.selectionEnd,
