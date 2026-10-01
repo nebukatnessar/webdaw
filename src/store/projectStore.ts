@@ -28,6 +28,9 @@ interface ProjectState {
   // Current project
   currentProjectId: string | null;
   currentProjectName: string;
+  // Updated on every successful save; drives the save toast in App.tsx
+  // (currentProjectId alone can't - it does not change when re-saving).
+  lastSavedAt: number;
 
   // Project file handles (for File System Access API)
   fileStructure: ProjectFileStructure | null;
@@ -39,7 +42,7 @@ interface ProjectState {
   // re-affirmed by the user (requestPermission requires a user gesture) -
   // surfaced as a one-click "Reconnect" action instead of losing file-backed
   // audio silently.
-  pendingReconnect: { handle: FileSystemDirectoryHandle; projectName: string } | null;
+  pendingReconnect: { handle: FileSystemDirectoryHandle | null; projectName: string } | null;
 
   // Actions
   setCurrentProject: (id: string | null, name: string) => void;
@@ -78,6 +81,7 @@ let projectCounter = 0;
 export const useProjectStore = create<ProjectState>((set, get) => ({
   currentProjectId: null,
   currentProjectName: 'Untitled Project',
+  lastSavedAt: 0,
   fileStructure: null,
   lastUsedDirectory: null,
   pendingReconnect: null,
@@ -117,10 +121,24 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
         set({ lastUsedDirectory: storedBaseDir });
       }
 
-      // Preferred path: reconnect to the real project folder via a
-      // persisted handle. queryPermission() needs no user gesture and shows
-      // no UI - if still granted, this loads real audio from disk exactly
-      // like a normal Open, no separate cache required.
+      // Peek at the auto-save snapshot up front: it names the project we
+      // need to find on disk and tells us whether there is anything to
+      // restore at all.
+      let autoSaveSerialized: SerializedProject | null = null;
+      try {
+        const autoSaveData = localStorage.getItem(PROJECT_AUTO_SAVE_KEY);
+        autoSaveSerialized = autoSaveData
+          ? (JSON.parse(autoSaveData) as SerializedProject)
+          : null;
+      } catch (e) {
+        console.warn('[restore] failed to read auto-save snapshot:', e);
+      }
+      console.log('[restore] auto-save project name:', autoSaveSerialized?.name ?? null);
+
+      // Preferred path 1: reconnect to the real project folder via the
+      // persisted handle. queryPermission() needs no user gesture and
+      // shows no UI - if still granted, this loads real audio from disk
+      // exactly like a normal Open.
       const storedProjectDir = await withTimeout(
         handleStore.getHandle<FileSystemDirectoryHandle>(PROJECT_FOLDER_HANDLE_KEY),
         3000,
@@ -144,51 +162,82 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
           }
           // Permission needs re-affirming, which requestPermission() can
           // only do in response to an actual user gesture - surface a
-          // one-click reconnect instead of a folder re-pick.
+          // one-click reconnect instead of a folder re-pick. The project
+          // folder is the only source of truth for its audio, so do not
+          // fall back to the localStorage snapshot here.
           set({ pendingReconnect: { handle: storedProjectDir, projectName: storedProjectDir.name } });
           console.log('[restore] permission not granted, showing reconnect banner');
-          // The project folder exists on disk and is the only source of
-          // truth for its audio. Do not fall back to the localStorage
-          // snapshot here - that would restore the structure with
-          // cache-hydrated wavs instead of the real files. Return and
-          // wait for the user to click Reconnect, which loads from disk.
           return;
         } catch (e) {
           console.warn('[restore] could not query permission for the stored project folder:', e);
         }
       }
 
-      // Fallback: restore structure (and its own cached audio) from the
-      // localStorage auto-save snapshot - covers browsers without File
-      // System Access support, and projects never given a real folder yet.
-      // Never reached while a reconnect is pending - that path returns
-      // early above so project data only ever comes from disk.
-      const autoSaveData = localStorage.getItem(PROJECT_AUTO_SAVE_KEY);
-      console.log('[restore] localStorage auto-save present:', !!autoSaveData);
-      if (autoSaveData) {
+      // Preferred path 2: the project folder handle is missing or invalid,
+      // but the base directory handle survives - locate the project
+      // folder by name under it and load from disk all the same.
+      const baseDir = get().lastUsedDirectory;
+      if (baseDir && autoSaveSerialized?.name) {
         try {
-          const serialized = JSON.parse(autoSaveData) as SerializedProject;
-          const tracks = convertToTracks(serialized.tracks);
+          const projectDir = await baseDir.getDirectoryHandle(autoSaveSerialized.name);
+          const permission = await withTimeout(
+            (projectDir as any).queryPermission({ mode: 'readwrite' }),
+            3000,
+            'queryPermission on project folder under base directory',
+          );
+          console.log('[restore] located project folder under base dir, permission:', permission);
+          if (permission === 'granted') {
+            const { tracks, transport } = await get().loadProject(projectDir);
+            trackStore.getState().setTracks(tracks);
+            transportStore.getState().setTransportState(transport);
+            console.log('[restore] loaded project folder by name:', projectDir.name);
+            return;
+          }
+          set({ pendingReconnect: { handle: projectDir, projectName: projectDir.name } });
+          console.log('[restore] permission not granted for located folder, showing reconnect banner');
+          return;
+        } catch (e) {
+          console.warn('[restore] could not locate project folder under base directory:', e);
+        }
+      }
+
+      // File System Access is available but no folder could be located.
+      // Ask the user to point us at the project folder instead of
+      // substituting cache-hydrated audio for the real files on disk.
+      const hasFileSystemAccess = typeof window !== 'undefined' && 'showDirectoryPicker' in window;
+      if (hasFileSystemAccess && autoSaveSerialized) {
+        set({ pendingReconnect: { handle: null, projectName: autoSaveSerialized.name } });
+        console.log('[restore] no folder handle available, asking user to re-pick the project folder');
+        return;
+      }
+
+      // Last resort, only in browsers without the File System Access API:
+      // restore the structure (and whatever audio survives in the durable
+      // cache) from the localStorage auto-save snapshot.
+      console.log('[restore] no disk access available, falling back to auto-save snapshot');
+      if (autoSaveSerialized) {
+        try {
+          const tracks = convertToTracks(autoSaveSerialized.tracks);
           await hydrateAudioFromCache(tracks);
 
           trackStore.getState().setTracks(tracks);
           transportStore.getState().setTransportState({
-            bpm: serialized.transport.bpm,
-            playheadBeats: serialized.transport.playheadBeats,
-            isRepeat: serialized.transport.isRepeat,
-            isSnapEnabled: serialized.transport.isSnapEnabled,
-            gridDivisionBeats: serialized.transport.gridDivisionBeats,
-            zoomLevel: serialized.transport.zoomLevel,
-            selectionStart: serialized.transport.selectionStart,
-            selectionEnd: serialized.transport.selectionEnd,
-            masterVolume: serialized.transport.masterVolume,
+            bpm: autoSaveSerialized.transport.bpm,
+            playheadBeats: autoSaveSerialized.transport.playheadBeats,
+            isRepeat: autoSaveSerialized.transport.isRepeat,
+            isSnapEnabled: autoSaveSerialized.transport.isSnapEnabled,
+            gridDivisionBeats: autoSaveSerialized.transport.gridDivisionBeats,
+            zoomLevel: autoSaveSerialized.transport.zoomLevel,
+            selectionStart: autoSaveSerialized.transport.selectionStart,
+            selectionEnd: autoSaveSerialized.transport.selectionEnd,
+            masterVolume: autoSaveSerialized.transport.masterVolume,
           });
           set({
             currentProjectId: `restored-${Date.now()}`,
-            currentProjectName: serialized.name,
+            currentProjectName: autoSaveSerialized.name,
           });
 
-          console.log('[restore] restored project from auto-save:', serialized.name);
+          console.log('[restore] restored project from auto-save:', autoSaveSerialized.name);
         } catch (e) {
           console.warn('[restore] failed to restore from auto-save:', e);
         }
@@ -203,17 +252,31 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
   reconnectProjectFolder: async () => {
     const pending = get().pendingReconnect;
     if (!pending) return;
+    let folderHandle: FileSystemDirectoryHandle;
     try {
-      const permission = await (pending.handle as any).requestPermission({ mode: 'readwrite' });
-      if (permission === 'granted') {
-        const { tracks, transport } = await get().loadProject(pending.handle);
-        trackStore.getState().setTracks(tracks);
-        transportStore.getState().setTransportState(transport);
+      if (pending.handle) {
+        const permission = await (pending.handle as any).requestPermission({ mode: 'readwrite' });
+        if (permission !== 'granted') {
+          // Keep the banner up so the user can retry.
+          console.warn('Reconnect permission not granted');
+          return;
+        }
+        folderHandle = pending.handle;
+      } else {
+        // No stored handle (e.g. the project predates handle persistence)
+        // - ask the user to point at the project folder directly.
+        if (typeof window === 'undefined' || !('showDirectoryPicker' in window)) return;
+        folderHandle = (await (window as any).showDirectoryPicker({
+          mode: 'readwrite',
+          startIn: 'documents',
+        })) as FileSystemDirectoryHandle;
       }
+      const { tracks, transport } = await get().loadProject(folderHandle);
+      trackStore.getState().setTracks(tracks);
+      transportStore.getState().setTransportState(transport);
+      set({ pendingReconnect: null });
     } catch (e) {
       console.error('Failed to reconnect to project folder:', e);
-    } finally {
-      set({ pendingReconnect: null });
     }
   },
 
@@ -255,6 +318,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
         set({
           currentProjectId: projectId,
           currentProjectName: projectName,
+          lastSavedAt: now,
         });
         
         // Save to auto-save for F5 restore
@@ -295,6 +359,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
           currentProjectName: projectName,
           fileStructure: structure,
           lastUsedDirectory: state.lastUsedDirectory, // Keep the same last used directory
+          lastSavedAt: now,
         });
 
         if (structure.folderHandle) {
@@ -348,6 +413,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
         currentProjectName: projectName,
         fileStructure: structure,
         lastUsedDirectory: baseDirHandle, // Remember the base directory for next time
+        lastSavedAt: now,
       });
 
       void handleStore.saveHandle(BASE_DIRECTORY_HANDLE_KEY, baseDirHandle);
