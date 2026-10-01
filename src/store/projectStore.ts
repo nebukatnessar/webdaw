@@ -147,6 +147,12 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
           // one-click reconnect instead of a folder re-pick.
           set({ pendingReconnect: { handle: storedProjectDir, projectName: storedProjectDir.name } });
           console.log('[restore] permission not granted, showing reconnect banner');
+          // The project folder exists on disk and is the only source of
+          // truth for its audio. Do not fall back to the localStorage
+          // snapshot here - that would restore the structure with
+          // cache-hydrated wavs instead of the real files. Return and
+          // wait for the user to click Reconnect, which loads from disk.
+          return;
         } catch (e) {
           console.warn('[restore] could not query permission for the stored project folder:', e);
         }
@@ -155,8 +161,8 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
       // Fallback: restore structure (and its own cached audio) from the
       // localStorage auto-save snapshot - covers browsers without File
       // System Access support, and projects never given a real folder yet.
-      // If a reconnect is pending, this is just an interim view; clicking
-      // Reconnect replaces it with the authoritative on-disk data.
+      // Never reached while a reconnect is pending - that path returns
+      // early above so project data only ever comes from disk.
       const autoSaveData = localStorage.getItem(PROJECT_AUTO_SAVE_KEY);
       console.log('[restore] localStorage auto-save present:', !!autoSaveData);
       if (autoSaveData) {
