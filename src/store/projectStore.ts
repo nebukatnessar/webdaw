@@ -317,11 +317,12 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
     if (state.fileStructure) {
       try {
         // Save to existing file system location
-        if (!state.fileStructure.folderHandle) {
+        const folderHandle = state.fileStructure.folderHandle;
+        if (!folderHandle) {
           throw new Error('No folder handle available for existing project');
         }
         await withModalProgress(`Saving "${projectName}"…`, (onProgress) =>
-          saveProjectWithAudio(tracks, serialized, state.fileStructure.folderHandle, onProgress),
+          saveProjectWithAudio(tracks, serialized, folderHandle, onProgress),
         );
 
         // Update metadata (preserve createdAt if project exists)
