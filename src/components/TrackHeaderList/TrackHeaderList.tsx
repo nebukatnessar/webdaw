@@ -1,37 +1,79 @@
-import { useState } from 'react';
-import type { RefObject } from 'react';
-import styles from './TrackHeaderList.module.css';
-import { useTrackStore } from '../../store/trackStore';
-import { useTransportStore } from '../../store/transportStore';
-import * as engine from '../../audio/engine';
-import { BEATS_PER_BAR } from '../../constants';
-import TrackMeter from './TrackMeter';
-import EffectsDialog from '../EffectsDialog/EffectsDialog';
+  const handleDragOver = (e: React.DragEvent) => {
+    if (!e.dataTransfer.types.includes('Files')) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'copy';
+    setIsDropOver(true);
+  };
 
-interface Props {
-  scrollRef: RefObject<HTMLDivElement | null>;
-  onScroll: (e: React.UIEvent<HTMLDivElement>) => void;
-}
+  const handleDragLeave = (e: React.DragEvent) => {
+    if (e.currentTarget.contains(e.relatedTarget as Node)) return;
+    setIsDropOver(false);
+  };
 
-function formatPan(pan: number): string {
-  const pct = Math.round(Math.abs(pan) * 100);
-  if (pct === 0) return 'C';
-  return pan < 0 ? `${pct}L` : `${pct}R`;
-}
+  const handleDrop = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    setIsDropOver(false);
+    const audioFiles = Array.from(e.dataTransfer.files).filter(
+      (f) => f.type.startsWith('audio/') || f.name.toLowerCase().endsWith('.wav'),
+    );
+    if (audioFiles.length === 0) return;
+    const startBeat =
+      Math.round(useTransportStore.getState().playheadBeats / BEATS_PER_BAR) * BEATS_PER_BAR;
+    void Promise.all(
+      audioFiles.map(async (file) => {
+        const buffer = await engine.decodeFile(file);
+        const bufferId = `buf-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+        engine.storeBuffer(bufferId, buffer);
+        const bpm = useTransportStore.getState().bpm;
+        return {
+          name: file.name.replace(/\.[^.]+$/, ''),
+          durationBeats: (buffer.duration * bpm) / 60,
+          audioBufferId: bufferId,
+        };
+      }),
+    )
+      .then((clipData) => createTracksForClips(clipData, startBeat))
+      .catch(() => undefined);
+  };
 
-export default function TrackHeaderList({ scrollRef, onScroll }: Props) {
-  const { tracks, updateTrack, selectedTrackIds, activeTrackId, selectTrack } = useTrackStore();
-  const reorderTrack = useTrackStore((s) => s.reorderTrack);
-  const createTracksForClips = useTrackStore((s) => s.createTracksForClips);
-  const toggleArmSelected = useTrackStore((s) => s.toggleArmSelected);
-  const toggleMuteSelected = useTrackStore((s) => s.toggleMuteSelected);
-  const toggleSoloSelected = useTrackStore((s) => s.toggleSoloSelected);
-  const deleteSelectedTracks = useTrackStore((s) => s.deleteSelectedTracks);
-  const [isDropOver, setIsDropOver] = useState(false);
-  const [draggedTrackId, setDraggedTrackId] = useState<string | null>(null);
-  const [dragOverTrackId, setDragOverTrackId] = useState<string | null>(null);
+  // Drag and drop handlers for track reordering
+  const handleDragStart = (e: React.DragEvent, trackId: string) => {
+    e.dataTransfer.setData('text/x-track-id', trackId);
+    e.dataTransfer.effectAllowed = 'move';
+    setDraggedTrackId(trackId);
+  };
 
-  // State for EffectsDialog
-  const [openDialogTrackId, setOpenDialogTrackId] = useState<string | null>(null);
-  const [dialogPosition, setDialogPosition] = useState({ x: 100, y: 100 });
-  const [dialogSize, setDialogSize] = useState({ width: 500, height: 400 });
+  const handleDragOverTrack = (e: React.DragEvent, trackId: string) => {
+    if (!draggedTrackId) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    setDragOverTrackId(trackId);
+  };
+
+  const handleDragLeaveTrack = (e: React.DragEvent) => {
+    // Only reset if leaving the entire component
+    if (!e.currentTarget.contains(e.relatedTarget as Node)) {
+      setDragOverTrackId(null);
+    }
+  };
+
+  const handleDropTrack = (e: React.DragEvent, dropTrackId: string) => {
+    e.preventDefault();
+    setDragOverTrackId(null);
+    setDraggedTrackId(null);
+    
+    const draggedTrackId = e.dataTransfer.getData('text/x-track-id');
+    if (!draggedTrackId || draggedTrackId === dropTrackId) return;
+    
+    const fromIndex = tracks.findIndex(t => t.id === draggedTrackId);
+    const toIndex = tracks.findIndex(t => t.id === dropTrackId);
+    
+    if (fromIndex !== -1 && toIndex !== -1) {
+      reorderTrack(fromIndex, toIndex);
+    }
+  };
+
+  const handleDragEnd = () => {
+    setDraggedTrackId(null);
+    setDragOverTrackId(null);
+  };
