@@ -38,15 +38,15 @@ interface TrackState {
   pasteClips: (targetTrackId: string, targetStartBeat: number) => void;
   deleteSelectedClips: () => void;
   undo: () => void;
-  redo: () =>
-  
+  redo: () => void;
+
   // New functions for multi-track controls
   toggleArmSelected: () => void;
   toggleMuteSelected: () => void;
   toggleSoloSelected: () => void;
   deleteSelectedTracks: () => void;
   duplicateSelected: () => void;
-  
+
   // Reorder tracks by moving a track from one index to another
   reorderTrack: (fromIndex: number, toIndex: number) => void;
 }
