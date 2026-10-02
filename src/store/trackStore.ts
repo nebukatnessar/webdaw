@@ -1,54 +1,126 @@
-import { create } from 'zustand';
-import type { Track, Clip } from '../types/daw';
-import { getDefaultCompressorSettings } from '../audio/compressor';
-import { getDefaultGateSettings } from '../audio/gate';
-import { getDefaultEQSettings } from '../audio/eq';
-import { getDefaultReverbSettings } from '../audio/reverb';
-import { getDefaultDelaySettings } from '../audio/delay';
+// New functions for multi-track controls
+  toggleArmSelected: () => {
+    set((state) => ({
+      tracks: state.tracks.map((t) =>
+        state.selectedTrackIds.includes(t.id)
+          ? { ...t, armed: !t.armed }
+          : t
+      ),
+    }));
+  },
 
-const TRACK_COLORS = ['#e06c75', '#61afef', '#98c379', '#e5c07b', '#c678dd', '#56b6c2'];
+  toggleMuteSelected: () => {
+    set((state) => ({
+      tracks: state.tracks.map((t) =>
+        state.selectedTrackIds.includes(t.id)
+          ? { ...t, muted: !t.muted }
+          : t
+      ),
+    }));
+  },
 
-interface TrackState {
-  tracks: Track[];
-  selectedTrackIds: string[];
-  activeTrackId: string | null;
-  selectedClipIds: string[];
-  clipboard: Clip[];
-  addTrack: () => void;
-  removeTrack: (id: string) => void;
-  updateTrack: (id: string, patch: Partial<Track>) => void;
-  setTracks: (tracks: Track[]) => void;
-  clearTracks: () => void;
-  selectTrack: (id: string, mode: 'replace' | 'toggle' | 'range') => void;
-  setActiveTrack: (id: string) => void;
-  addClip: (
-    trackId: string,
-    startBeat: number,
-    durationBeats: number,
-    name: string,
-    audioBufferId: string,
-  ) => void;
-  moveClip: (clipId: string, fromTrackId: string, toTrackId: string, newStartBeat: number) => void;
-  createTracksForClips: (
-    clips: Array<{ name: string; durationBeats: number; audioBufferId: string }>,
-    startBeat: number,
-  ) => void;
-  splitClipsAt: (beats: number[], trackIds?: string[]) => void;
-  undoSplit: () => void;
-  trimClip: (clipId: string, patch: { startBeat: number; bufferOffsetBeats: number; durationBeats: number }) => void;
-  selectClip: (id: string, additive: boolean) => void;
-  clearClipSelection: () => void;
-  copySelected: () => void;
-  cutSelected: () => void;
-  pasteAtPlayhead: (playheadBeats: number) => void;
-  deleteSelected: () => void;
-  quantizeSelected: (gridBeats: number) => void;
-  // New functions for multi-track controls
-  toggleArmSelected: () => void;
-  toggleMuteSelected: () => void;
-  toggleSoloSelected: () => void;
-  deleteSelectedTracks: () => void;
-  duplicateSelected: () => void;
+  toggleSoloSelected: () => {
+    set((state) => {
+      // If any selected track is soloed, unsolo all selected tracks
+      const anySoloed = state.selectedTrackIds.some((id) => {
+        const track = state.tracks.find((t) => t.id === id);
+        return track?.soloed;
+      });
+      return {
+        tracks: state.tracks.map((t) =>
+          state.selectedTrackIds.includes(t.id)
+            ? { ...t, soloed: !anySoloed }
+            : t
+        ),
+      };
+    });
+  },
+
+  deleteSelectedTracks: () => {
+    set((state) => {
+      const selectedIds = new Set(state.selectedTrackIds);
+      const newTracks = state.tracks.filter((t) => !selectedIds.has(t.id));
+      
+      // Update active track: if the active track was deleted, promote the nearest remaining track
+      let newActiveTrackId = state.activeTrackId;
+      let newSelectedTrackIds = state.selectedTrackIds.filter((id) => !selectedIds.has(id));
+      
+      if (state.activeTrackId !== null && selectedIds.has(state.activeTrackId)) {
+        newActiveTrackId = null;
+        newSelectedTrackIds = [];
+        if (newTracks.length > 0) {
+          // Prefer the first remaining track
+          newActiveTrackId = newTracks[0].id;
+          newSelectedTrackIds = [newActiveTrackId];
+        }
+      } else if (newSelectedTrackIds.length === 0 && newTracks.length > 0) {
+        // If selection is empty but tracks remain, select the first track
+        newActiveTrackId = newTracks[0].id;
+        newSelectedTrackIds = [newActiveTrackId];
+      }
+      
+      return {
+        tracks: newTracks,
+        selectedTrackIds: newSelectedTrackIds,
+        activeTrackId: newActiveTrackId,
+      };
+    });
+  },
+
+  duplicateSelected: () => {
+    set((state) => {
+      const selectedClips = getSelectedClips(state.tracks, state.selectedClipIds);
+      if (selectedClips.length === 0) return state;
+      
+      // Push current state to undo stack
+      pushToUndoStack(state.tracks);
+      
+      // Calculate batchStart and batchEnd
+      const batchStart = Math.min(...selectedClips.map(({ clip }) => clip.startBeat));
+      const batchEnd = Math.max(...selectedClips.map(({ clip }) => clip.startBeat + clip.durationBeats));
+      const offset = batchEnd - batchStart;
+      
+      // Create new clips with fresh IDs and offset positions
+      const newClips: Clip[] = selectedClips.map(({ clip }) => ({
+        ...clip,
+        id: generateClipId(),
+        startBeat: clip.startBeat + offset,
+      }));
+      
+      // Build a map of trackId -> clips to duplicate
+      const clipsByTrackId: Record<string, Clip[]> = {};
+      for (const clip of newClips) {
+        if (!clipsByTrackId[clip.trackId]) {
+          clipsByTrackId[clip.trackId] = [];
+        }
+        clipsByTrackId[clip.trackId].push(clip);
+      }
+      
+      // Add duplicated clips to their original tracks
+      const newTracks = state.tracks.map((track) => {
+        const clipsToAdd = clipsByTrackId[track.id];
+        if (clipsToAdd && clipsToAdd.length > 0) {
+          return { ...track, clips: [...track.clips, ...clipsToAdd] };
+        }
+        return track;
+      });
+      
+      // Select the newly duplicated clips
+      const newSelectedClipIds = newClips.map((clip) => clip.id);
+      
+      return {
+        tracks: newTracks,
+        selectedClipIds: newSelectedClipIds,
+      };
+    });
+  },
+  
   // Reorder tracks by moving a track from one index to another
-  reorderTrack: (fromIndex: number, toIndex: number) => void;
-}
+  reorderTrack: (fromIndex: number, toIndex: number) => {
+    set((state) => {
+      const newTracks = [...state.tracks];
+      const [trackToMove] = newTracks.splice(fromIndex, 1);
+      newTracks.splice(toIndex, 0, trackToMove);
+      return { tracks: newTracks };
+    });
+  },
