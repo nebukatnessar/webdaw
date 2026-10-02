@@ -12,6 +12,7 @@
   flex: 1;
   overflow-x: auto;
   overflow-y: auto;
+  min-height: 0;
 }
 
 /* Full-width timeline container */

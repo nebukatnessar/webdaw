@@ -27,6 +27,7 @@
   overflow-y: scroll;
   overflow-x: hidden;
   scrollbar-width: none; /* hidden: synced via arrange view scrollbar */
+  min-height: 0;
 }
 
 .scroll::-webkit-scrollbar {
