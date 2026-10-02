@@ -450,7 +450,18 @@ export default function TransportBar() {
           💾 Export
         </button>
 
-        <button className={styles.btn + ' ' + styles.addTrackBtn} onClick={addTrack}>
+        <button
+          className={styles.btn + ' ' + styles.addTrackBtn}
+          onClick={() => addTrack({
+            name: `Track ${tracks.length + 1}`,
+            muted: false,
+            soloed: false,
+            armed: false,
+            volume: 1,
+            pan: 0,
+            color: '#4f46e5',
+          })}
+        >
           + Track
         </button>
 

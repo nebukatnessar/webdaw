@@ -1,7 +1,7 @@
 import { useState, useCallback, useEffect, useMemo } from 'react';
 import type { RefObject } from 'react';
 import styles from './ArrangeView.module.css';
-import useTrackStore from '../../store/trackStore';
+import useTrackStore, { type TrackState } from '../../store/trackStore';
 import { useTransportStore, usePixelsPerBeat } from '../../store/transportStore';
 import { BEATS_PER_BAR, MIN_TOTAL_BARS, TIMELINE_MARGIN_BARS } from '../../constants';
 import * as engine from '../../audio/engine';
@@ -130,20 +130,7 @@ export default function ArrangeView({ scrollRef, onScroll }: Props) {
       }),
     )
       .then((clipData) => {
-        const createTracksForClips = useTrackStore.getState().addTrack; // Fallback, though this should ideally be handled differently
-        clipData.forEach((clip) => {
-          createTracksForClips({
-            name: clip.name,
-            clips: [{
-              id: Date.now().toString(),
-              name: clip.name,
-              startBeat,
-              durationBeats: clip.durationBeats,
-              audioBufferId: clip.audioBufferId,
-              trackId: '', // Will be set by addTrack
-            }],
-          });
-        });
+        useTrackStore.getState().createTracksForClips(clipData, startBeat);
       })
       .catch(() => undefined);
   };
@@ -184,20 +171,7 @@ export default function ArrangeView({ scrollRef, onScroll }: Props) {
       }),
     )
       .then((clipData) => {
-        const createTracksForClips = useTrackStore.getState().addTrack; // Fallback
-        clipData.forEach((clip) => {
-          createTracksForClips({
-            name: clip.name,
-            clips: [{
-              id: Date.now().toString(),
-              name: clip.name,
-              startBeat,
-              durationBeats: clip.durationBeats,
-              audioBufferId: clip.audioBufferId,
-              trackId: '', // Will be set by addTrack
-            }],
-          });
-        });
+        useTrackStore.getState().createTracksForClips(clipData, startBeat);
       })
       .catch(() => undefined);
   };
@@ -228,7 +202,6 @@ export default function ArrangeView({ scrollRef, onScroll }: Props) {
     // ── Internal clip move ──────────────────────────────────────────────────
     const clipId = e.dataTransfer.getData('text/x-clip-id');
     if (clipId) {
-      const sourceTrackId = e.dataTransfer.getData('text/x-clip-track-id');
       const beatOffset = parseFloat(e.dataTransfer.getData('text/x-clip-beat-offset') || '0');
       let rawBeat = Math.max(0, contentX / pixelsPerBeat - beatOffset);
       

@@ -1,6 +1,7 @@
 import type { Track } from '../types/daw';
 import { cacheBuffer } from './bufferCache';
 import useTrackStore from '../store/trackStore';
+import type { TrackState } from '../store/trackStore';
 import { rmsFromAnalyser } from './meterUtils';
 import {
   getOrCreateCompressorNode,
