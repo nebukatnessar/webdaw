@@ -21,13 +21,16 @@ function formatPan(pan: number): string {
 
 export default function TrackHeaderList({ scrollRef, onScroll }: Props) {
   const { tracks, updateTrack, selectedTrackIds, activeTrackId, selectTrack } = useTrackStore();
+  const reorderTrack = useTrackStore((s) => s.reorderTrack);
   const createTracksForClips = useTrackStore((s) => s.createTracksForClips);
   const toggleArmSelected = useTrackStore((s) => s.toggleArmSelected);
   const toggleMuteSelected = useTrackStore((s) => s.toggleMuteSelected);
   const toggleSoloSelected = useTrackStore((s) => s.toggleSoloSelected);
   const deleteSelectedTracks = useTrackStore((s) => s.deleteSelectedTracks);
   const [isDropOver, setIsDropOver] = useState(false);
-  
+  const [draggedTrackId, setDraggedTrackId] = useState<string | null>(null);
+  const [dragOverTrackId, setDragOverTrackId] = useState<string | null>(null);
+
   // State for EffectsDialog
   const [openDialogTrackId, setOpenDialogTrackId] = useState<string | null>(null);
   const [dialogPosition, setDialogPosition] = useState({ x: 100, y: 100 });
@@ -69,6 +72,48 @@ export default function TrackHeaderList({ scrollRef, onScroll }: Props) {
     )
       .then((clipData) => createTracksForClips(clipData, startBeat))
       .catch(() => undefined);
+  };
+
+  // Drag and drop handlers for track reordering
+  const handleDragStart = (e: React.DragEvent, trackId: string) => {
+    e.dataTransfer.setData('text/x-track-id', trackId);
+    e.dataTransfer.effectAllowed = 'move';
+    setDraggedTrackId(trackId);
+  };
+
+  const handleDragOverTrack = (e: React.DragEvent, trackId: string) => {
+    if (!draggedTrackId) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    setDragOverTrackId(trackId);
+  };
+
+  const handleDragLeaveTrack = (e: React.DragEvent) => {
+    // Only reset if leaving the entire component
+    if (!e.currentTarget.contains(e.relatedTarget as Node)) {
+      setDragOverTrackId(null);
+    }
+  };
+
+  const handleDropTrack = (e: React.DragEvent, dropTrackId: string) => {
+    e.preventDefault();
+    setDragOverTrackId(null);
+    setDraggedTrackId(null);
+    
+    const draggedTrackId = e.dataTransfer.getData('text/x-track-id');
+    if (!draggedTrackId || draggedTrackId === dropTrackId) return;
+    
+    const fromIndex = tracks.findIndex(t => t.id === draggedTrackId);
+    const toIndex = tracks.findIndex(t => t.id === dropTrackId);
+    
+    if (fromIndex !== -1 && toIndex !== -1) {
+      reorderTrack(fromIndex, toIndex);
+    }
+  };
+
+  const handleDragEnd = () => {
+    setDraggedTrackId(null);
+    setDragOverTrackId(null);
   };
 
   // Handle row click for track selection
@@ -125,8 +170,14 @@ export default function TrackHeaderList({ scrollRef, onScroll }: Props) {
           return (
             <div
               key={track.id}
-              className={`${styles.row} ${isSelected ? styles.selected : ''} ${isActive ? styles.active : ''}`}
+              className={`${styles.row} ${isSelected ? styles.selected : ''} ${isActive ? styles.active : ''} ${dragOverTrackId === track.id ? styles.rowDropTarget : ''} ${draggedTrackId === track.id ? styles.rowDragging : ''}`}
               onClick={(e) => handleRowClick(e, track.id)}
+              draggable
+              onDragStart={(e) => handleDragStart(e, track.id)}
+              onDragOver={(e) => handleDragOverTrack(e, track.id)}
+              onDragLeave={handleDragLeaveTrack}
+              onDrop={(e) => handleDropTrack(e, track.id)}
+              onDragEnd={handleDragEnd}
               role="option"
               aria-selected={isSelected}
               aria-label={`Track ${track.name}`}

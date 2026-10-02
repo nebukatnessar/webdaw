@@ -5,7 +5,7 @@ import TrackHeaderList from './components/TrackHeaderList/TrackHeaderList';
 import ArrangeView from './components/ArrangeView/ArrangeView';
 import MasterFader from './components/MasterFader/MasterFader';
 import { useProjectStore } from './store/projectStore';
-import { useTrackStore } from './store/trackStore';
+import useTrackStore from './store/trackStore';
 import { useTransportStore } from './store/transportStore';
 import Toast from './components/Toast/Toast';
 import ProgressModal from './components/ProgressModal/ProgressModal';
@@ -94,38 +94,41 @@ function App() {
       // Handle undo split with Ctrl+Z or Cmd+Z
       if ((e.ctrlKey || e.metaKey) && e.key === 'z' && !e.shiftKey) {
         e.preventDefault();
-        useTrackStore.getState().undoSplit();
+        useTrackStore.getState().undo();
       }
 
       // Handle copy with Ctrl/Cmd+C
       if ((e.ctrlKey || e.metaKey) && e.key === 'c' && !e.shiftKey && !e.altKey) {
         e.preventDefault();
-        useTrackStore.getState().copySelected();
+        useTrackStore.getState().copySelectedClips();
       }
 
       // Handle cut with Ctrl/Cmd+X
       if ((e.ctrlKey || e.metaKey) && e.key === 'x' && !e.shiftKey && !e.altKey) {
         e.preventDefault();
-        useTrackStore.getState().cutSelected();
+        useTrackStore.getState().cutSelectedClips();
       }
 
       // Handle paste with Ctrl/Cmd+V
       if ((e.ctrlKey || e.metaKey) && e.key === 'v' && !e.shiftKey && !e.altKey) {
         e.preventDefault();
         const { playheadBeats } = useTransportStore.getState();
-        useTrackStore.getState().pasteAtPlayhead(playheadBeats);
+        const activeTrackId = useTrackStore.getState().activeTrackId;
+        if (activeTrackId) {
+          useTrackStore.getState().pasteClips(activeTrackId, playheadBeats);
+        }
       }
 
       // Handle delete with Delete or Backspace
       if (e.key === 'Delete' || e.key === 'Backspace') {
         e.preventDefault();
-        useTrackStore.getState().deleteSelected();
+        useTrackStore.getState().deleteSelectedClips();
       }
 
       // Handle Escape to clear clip selection
       if (e.key === 'Escape') {
         e.preventDefault();
-        useTrackStore.getState().clearClipSelection();
+        useTrackStore.getState().clearSelectedClips();
       }
 
       // Handle duplicate with Ctrl/Cmd+D

@@ -1,780 +1,626 @@
+// Track Store with undo/redo functionality
 import { create } from 'zustand';
-import type { Track, Clip } from '../types/daw';
-import { getDefaultCompressorSettings } from '../audio/compressor';
-import { getDefaultGateSettings } from '../audio/gate';
-import { getDefaultEQSettings } from '../audio/eq';
-import { getDefaultReverbSettings } from '../audio/reverb';
-import { getDefaultDelaySettings } from '../audio/delay';
+import { Track, Clip } from '../types/daw';
+import { generateClipId } from '../utils/idGenerator';
 
-const TRACK_COLORS = ['#e06c75', '#61afef', '#98c379', '#e5c07b', '#c678dd', '#56b6c2'];
-
-interface TrackState {
+export interface TrackState {
   tracks: Track[];
   selectedTrackIds: string[];
   activeTrackId: string | null;
   selectedClipIds: string[];
-  clipboard: Clip[];
-  addTrack: () => void;
-  removeTrack: (id: string) => void;
-  updateTrack: (id: string, patch: Partial<Track>) => void;
+  undoStack: Track[][];
+  redoStack: Track[][];
+  clipboard: Clip[];  // Added clipboard to TrackState
+
+  // Track and Clip Management
+  addTrack: (track: Omit<Track, 'id' | 'clips'>) => void;
+  createTracksForClips: (clips: { name: string; durationBeats: number; audioBufferId: string }[], startBeat: number) => void;
+  updateTrack: (trackId: string, updates: Partial<Track>) => void;
   setTracks: (tracks: Track[]) => void;
   clearTracks: () => void;
-  selectTrack: (id: string, mode: 'replace' | 'toggle' | 'range') => void;
-  setActiveTrack: (id: string) => void;
-  addClip: (
-    trackId: string,
-    startBeat: number,
-    durationBeats: number,
-    name: string,
-    audioBufferId: string,
-  ) => void;
-  moveClip: (clipId: string, fromTrackId: string, toTrackId: string, newStartBeat: number) => void;
-  createTracksForClips: (
-    clips: Array<{ name: string; durationBeats: number; audioBufferId: string }>,
-    startBeat: number,
-  ) => void;
-  splitClipsAt: (beats: number[], trackIds?: string[]) => void;
-  undoSplit: () => void;
-  trimClip: (clipId: string, patch: { startBeat: number; bufferOffsetBeats: number; durationBeats: number }) => void;
-  selectClip: (id: string, additive: boolean) => void;
-  clearClipSelection: () => void;
-  copySelected: () => void;
-  cutSelected: () => void;
-  pasteAtPlayhead: (playheadBeats: number) => void;
-  deleteSelected: () => void;
+  removeTrack: (trackId: string) => void;
+  setActiveTrack: (trackId: string | null) => void;
+  selectTrack: (trackId: string, mode?: 'toggle' | 'range' | 'replace') => void;
+  deselectTrack: (trackId: string) => void;
+  selectOnlyTrack: (trackId: string) => void;
+  toggleTrackSelection: (trackId: string) => void;
+  clearSelectedTracks: () => void;
+  addClipToTrack: (trackId: string, clip: Omit<Clip, 'id' | 'trackId' | 'color'> & Partial<Pick<Clip, 'trackId' | 'color'>>) => void;
+  removeClipFromTrack: (trackId: string, clipId: string) => void;
+  updateClip: (trackId: string, clipId: string, updates: Partial<Clip>) => void;
+  selectClip: (clipId: string, additive?: boolean) => void;
+  deselectClip: (clipId: string) => void;
+  selectOnlyClip: (clipId: string) => void;
+  toggleClipSelection: (clipId: string) => void;
+  clearSelectedClips: () => void;
+  splitClip: (trackId: string, clipId: string, splitBeat: number) => void;
+  splitClipsAt: (splitBeats: number[]) => void;
   quantizeSelected: (gridBeats: number) => void;
+  trimClip: (clipId: string, updates: Pick<Clip, 'startBeat' | 'durationBeats'> & Partial<Pick<Clip, 'bufferOffsetBeats'>>) => void;
+  addClip: {
+    (trackId: string, clip: Omit<Clip, 'id' | 'trackId' | 'color'> & Partial<Pick<Clip, 'trackId' | 'color'>>): void;
+    (trackId: string, startBeat: number, durationBeats: number, name: string, audioBufferId: string): void;
+  };
+  trimClipStart: (trackId: string, clipId: string, newStartBeat: number) => void;
+  trimClipEnd: (trackId: string, clipId: string, newEndBeat: number) => void;
+  moveClip: (clipId: string, newTrackId: string, newStartBeat: number) => void;
+  resizeClip: (trackId: string, clipId: string, newStartBeat: number, newDuration: number) => void;
+  cutSelectedClips: () => void;
+  copySelectedClips: () => void;
+  pasteClips: (targetTrackId: string, targetStartBeat: number) => void;
+  deleteSelectedClips: () => void;
+  undo: () => void;
+  redo: () => void;
+
   // New functions for multi-track controls
   toggleArmSelected: () => void;
   toggleMuteSelected: () => void;
   toggleSoloSelected: () => void;
   deleteSelectedTracks: () => void;
   duplicateSelected: () => void;
+
+  // Reorder tracks by moving a track from one index to another
+  reorderTrack: (fromIndex: number, toIndex: number) => void;
 }
 
-let trackCounter = 0;
-
-// Undo stack for split, trim, cut, paste, and delete operations
-const undoStack: Track[][] = [];
-const MAX_UNDO_STACK = 50;
-
-function pushToUndoStack(tracks: Track[]): void {
-  undoStack.push(JSON.parse(JSON.stringify(tracks)));
-  if (undoStack.length > MAX_UNDO_STACK) {
-    undoStack.shift();
-  }
-}
-
-function generateClipId(): string {
-  return `clip-${Date.now()}-${Math.random().toString(36).substring(2, 8)}`;
-}
-
-// Helper function to split clips at a single boundary for specific tracks
-function splitClipsAtBoundary(tracks: Track[], boundaryBeat: number, trackFilter: (trackId: string) => boolean): Track[] {
-  return tracks.map((track) => {
-    // Skip tracks that don't match the filter
-    if (!trackFilter(track.id)) {
-      return track;
-    }
-    
-    const newClips: Clip[] = [];
-    for (const clip of track.clips) {
-      const clipStart = clip.startBeat;
-      const clipEnd = clip.startBeat + clip.durationBeats;
-      
-      // Check if the boundary is strictly inside the clip
-      if (clipStart < boundaryBeat && boundaryBeat < clipEnd) {
-        // Create left clip
-        const leftClip: Clip = {
-          ...clip,
-          durationBeats: boundaryBeat - clipStart,
-        };
-        newClips.push(leftClip);
-        
-        // Create right clip
-        const rightClip: Clip = {
-          ...clip,
-          id: generateClipId(),
-          startBeat: boundaryBeat,
-          bufferOffsetBeats: (clip.bufferOffsetBeats ?? 0) + (boundaryBeat - clipStart),
-          durationBeats: clipEnd - boundaryBeat,
-        };
-        newClips.push(rightClip);
-      } else {
-        // No split needed for this clip
-        newClips.push(clip);
-      }
-    }
-    return { ...track, clips: newClips };
-  });
-}
-
-// Helper to find the index of a track in the tracks array
-function findTrackIndex(tracks: Track[], trackId: string): number {
-  return tracks.findIndex((t) => t.id === trackId);
-}
-
-// Helper to get the nearest track to the removed active track
-function getNearestTrackIndex(tracks: Track[], removedIndex: number): number | null {
-  if (tracks.length === 0) return null;
-  // Prefer the track below (higher index)
-  if (removedIndex < tracks.length - 1) {
-    return removedIndex + 1;
-  }
-  // Otherwise, the track above (lower index)
-  if (removedIndex > 0) {
-    return removedIndex - 1;
-  }
-  // If it was the only track, return null (handled by clearTracks)
-  return null;
-}
-
-// Helper to find a clip by ID across all tracks
-function findClipAndTrack(tracks: Track[], clipId: string): { clip: Clip; track: Track; trackIndex: number } | null {
-  for (let i = 0; i < tracks.length; i++) {
-    const track = tracks[i];
-    const clip = track.clips.find((c) => c.id === clipId);
-    if (clip) {
-      return { clip, track, trackIndex: i };
-    }
-  }
-  return null;
-}
-
-// Helper to find all selected clips across all tracks
-function getSelectedClips(tracks: Track[], selectedClipIds: string[]): { clip: Clip; track: Track; trackIndex: number }[] {
-  const selected: { clip: Clip; track: Track; trackIndex: number }[] = [];
-  for (let i = 0; i < tracks.length; i++) {
-    const track = tracks[i];
+// Helper function to get selected clips
+const getSelectedClips = (tracks: Track[], selectedClipIds: string[]): { clip: Clip; trackId: string }[] => {
+  const selectedClips: { clip: Clip; trackId: string }[] = [];
+  for (const track of tracks) {
     for (const clip of track.clips) {
       if (selectedClipIds.includes(clip.id)) {
-        selected.push({ clip, track, trackIndex: i });
+        selectedClips.push({ clip, trackId: track.id });
       }
     }
   }
-  return selected;
-}
-
-// Minimum clip length in beats
-const MIN_CLIP_BEATS = 0.05;
+  return selectedClips;
+};
 
 export const useTrackStore = create<TrackState>((set) => ({
   tracks: [],
   selectedTrackIds: [],
   activeTrackId: null,
   selectedClipIds: [],
+  undoStack: [],
+  redoStack: [],
   clipboard: [],
 
-  selectTrack: (id, mode) => {
-    set((state) => {
-      const tracks = state.tracks;
-      const trackIds = tracks.map((t) => t.id);
-      const currentActiveIndex = state.activeTrackId ? findTrackIndex(tracks, state.activeTrackId) : -1;
-      const clickedIndex = findTrackIndex(tracks, id);
-      
-      if (clickedIndex === -1) {
-        // Clicked track doesn't exist, do nothing
-        return state;
-      }
-
-      let newSelectedTrackIds: string[];
-      const newActiveTrackId: string | null = id;
-
-      switch (mode) {
-        case 'replace':
-          // Plain click: select only this track
-          newSelectedTrackIds = [id];
-          break;
-
-        case 'toggle':
-          // Ctrl/Cmd+click: toggle the track in/out of selection
-          if (state.selectedTrackIds.includes(id)) {
-            // If it's the active track, do not remove it (invariant: active is always selected)
-            if (state.activeTrackId === id) {
-              newSelectedTrackIds = [...state.selectedTrackIds];
-            } else {
-              newSelectedTrackIds = state.selectedTrackIds.filter((trackId) => trackId !== id);
-            }
-          } else {
-            newSelectedTrackIds = [...state.selectedTrackIds, id];
-          }
-          break;
-
-        case 'range':
-          // Shift+click: select contiguous range from active to clicked
-          if (currentActiveIndex === -1 || clickedIndex === -1) {
-            newSelectedTrackIds = [id];
-          } else {
-            const startIndex = Math.min(currentActiveIndex, clickedIndex);
-            const endIndex = Math.max(currentActiveIndex, clickedIndex);
-            newSelectedTrackIds = trackIds.slice(startIndex, endIndex + 1);
-          }
-          break;
-      }
-
-      // Ensure active track is always in the selection
-      if (newActiveTrackId && !newSelectedTrackIds.includes(newActiveTrackId)) {
-        newSelectedTrackIds = [...newSelectedTrackIds, newActiveTrackId];
-      }
-
-      return {
-        selectedTrackIds: newSelectedTrackIds,
-        activeTrackId: newActiveTrackId,
-      };
-    });
-  },
-
-  setActiveTrack: (id) => {
-    set((state) => {
-      const tracks = state.tracks;
-      const clickedIndex = findTrackIndex(tracks, id);
-      
-      if (clickedIndex === -1) {
-        return state;
-      }
-
-      // Active track must always be in the selection
-      let newSelectedTrackIds = [...state.selectedTrackIds];
-      if (!newSelectedTrackIds.includes(id)) {
-        newSelectedTrackIds = [id];
-      }
-
-      return {
-        selectedTrackIds: newSelectedTrackIds,
-        activeTrackId: id,
-      };
-    });
-  },
-
-  selectClip: (id, additive) => {
-    set((state) => {
-      if (additive) {
-        // Shift+click: toggle selection
-        const newSelectedClipIds = state.selectedClipIds.includes(id)
-          ? state.selectedClipIds.filter((clipId) => clipId !== id)
-          : [...state.selectedClipIds, id];
-        return { selectedClipIds: newSelectedClipIds };
-      } else {
-        // Regular click: replace selection
-        return { selectedClipIds: [id] };
-      }
-    });
-  },
-
-  clearClipSelection: () => {
-    set({ selectedClipIds: [] });
-  },
-
-  copySelected: () => {
-    set((state) => {
-      const selectedClips = getSelectedClips(state.tracks, state.selectedClipIds);
-      // Deep copy the selected clips for the clipboard
-      const clipboard: Clip[] = selectedClips.map(({ clip }) => ({ ...clip }));
-      return { clipboard };
-    });
-  },
-
-  cutSelected: () => {
-    set((state) => {
-      // Push current state to undo stack
-      pushToUndoStack(state.tracks);
-      
-      const selectedClips = getSelectedClips(state.tracks, state.selectedClipIds);
-      if (selectedClips.length === 0) return state;
-      
-      // Deep copy the selected clips for the clipboard
-      const clipboard: Clip[] = selectedClips.map(({ clip }) => ({ ...clip }));
-      
-      // Remove selected clips from their tracks
-      const newTracks = [...state.tracks];
-      for (const { clip, trackIndex } of selectedClips) {
-        newTracks[trackIndex] = {
-          ...newTracks[trackIndex],
-          clips: newTracks[trackIndex].clips.filter((c) => c.id !== clip.id),
-        };
-      }
-      
-      return {
-        tracks: newTracks,
-        clipboard,
-        selectedClipIds: [],
-      };
-    });
-  },
-
-  pasteAtPlayhead: (playheadBeats: number) => {
-    set((state) => {
-      if (state.clipboard.length === 0) return state;
-      
-      // Push current state to undo stack
-      pushToUndoStack(state.tracks);
-      
-      // Determine target tracks: selected tracks or active track
-      let targetTrackIds: string[];
-      if (state.selectedTrackIds.length > 0) {
-        targetTrackIds = state.selectedTrackIds;
-      } else if (state.activeTrackId) {
-        targetTrackIds = [state.activeTrackId];
-      } else {
-        // No tracks selected or active: fail silently
-        return state;
-      }
-
-      // Calculate the earliest clip in the clipboard to align with playhead
-      const clipboardClips = [...state.clipboard];
-      const earliestClip = clipboardClips.reduce((earliest, clip) =>
-        (clip.startBeat < earliest.startBeat ? clip : earliest),
-        clipboardClips[0]
-      );
-      const earliestStartBeat = earliestClip.startBeat;
-
-      // Create new clips with fresh IDs and adjusted positions
-      const newClips: Clip[] = clipboardClips.map((clip) => {
-        // Calculate relative offset from the earliest clip
-        const relativeOffset = clip.startBeat - earliestStartBeat;
-        const newStartBeat = playheadBeats + relativeOffset;
-        
-        return {
-          ...clip,
-          id: generateClipId(),
-          startBeat: newStartBeat,
-          // Remove trackId to reassign later
-          trackId: '',
-        };
-      });
-
-      // Distribute clips across target tracks
-      const newTracks = [...state.tracks];
-      const clipsPerTrack = Math.ceil(newClips.length / targetTrackIds.length);
-
-      for (let i = 0; i < targetTrackIds.length; i++) {
-        const trackId = targetTrackIds[i];
-        const trackIndex = findTrackIndex(newTracks, trackId);
-        if (trackIndex === -1) continue; // Skip if track doesn't exist
-
-        const startIdx = i * clipsPerTrack;
-        const endIdx = startIdx + clipsPerTrack;
-        const clipsForTrack = newClips.slice(startIdx, endIdx);
-
-        // Assign clips to this track
-        const updatedClips = clipsForTrack.map((clip) => ({
-          ...clip,
-          trackId,
-          color: newTracks[trackIndex].color, // Use the track's color
-        }));
-
-        newTracks[trackIndex] = {
-          ...newTracks[trackIndex],
-          clips: [...newTracks[trackIndex].clips, ...updatedClips],
-        };
-      }
-
-      // Select the newly pasted clips
-      const newSelectedClipIds = newClips.map((clip) => clip.id);
-
-      return {
-        tracks: newTracks,
-        selectedClipIds: newSelectedClipIds,
-      };
-    });
-  },
-
-  deleteSelected: () => {
-    set((state) => {
-      const selectedClips = getSelectedClips(state.tracks, state.selectedClipIds);
-      if (selectedClips.length === 0) return state;
-      
-      // Push current state to undo stack
-      pushToUndoStack(state.tracks);
-      
-      // Remove selected clips from their tracks
-      const newTracks = [...state.tracks];
-      for (const { clip, trackIndex } of selectedClips) {
-        newTracks[trackIndex] = {
-          ...newTracks[trackIndex],
-          clips: newTracks[trackIndex].clips.filter((c) => c.id !== clip.id),
-        };
-      }
-      
-      return {
-        tracks: newTracks,
-        selectedClipIds: [],
-      };
-    });
-  },
-
-  quantizeSelected: (gridBeats: number) => {
-    set((state) => {
-      if (state.selectedClipIds.length === 0) {
-        return state;
-      }
-
-      // Push current state to undo stack
-      pushToUndoStack(state.tracks);
-
-      // Quantize each selected clip's startBeat
-      const newTracks = [...state.tracks];
-      for (const track of newTracks) {
-        const newClips = track.clips.map((clip) => {
-          if (state.selectedClipIds.includes(clip.id)) {
-            const quantizedStartBeat = Math.round(clip.startBeat / gridBeats) * gridBeats;
-            return { ...clip, startBeat: quantizedStartBeat };
-          }
-          return clip;
-        });
-        track.clips = newClips;
-      }
-
-      return { tracks: newTracks };
-    });
-  },
-
-  duplicateSelected: () => {
-    set((state) => {
-      const selectedClips = getSelectedClips(state.tracks, state.selectedClipIds);
-      if (selectedClips.length === 0) return state;
-
-      // Push current state to undo stack
-      pushToUndoStack(state.tracks);
-
-      // Calculate batchStart and batchEnd
-      const batchStart = Math.min(...selectedClips.map(({ clip }) => clip.startBeat));
-      const batchEnd = Math.max(...selectedClips.map(({ clip }) => clip.startBeat + clip.durationBeats));
-      const offset = batchEnd - batchStart;
-
-      // Create new clips with fresh IDs and offset positions
-      const newClips: Clip[] = selectedClips.map(({ clip }) => ({
-        ...clip,
-        id: generateClipId(),
-        startBeat: clip.startBeat + offset,
-      }));
-
-      // Build a map of trackId -> clips to duplicate
-      const clipsByTrackId: Record<string, Clip[]> = {};
-      for (const clip of newClips) {
-        if (!clipsByTrackId[clip.trackId]) {
-          clipsByTrackId[clip.trackId] = [];
-        }
-        clipsByTrackId[clip.trackId].push(clip);
-      }
-
-      // Add duplicated clips to their original tracks
-      const newTracks = state.tracks.map((track) => {
-        const clipsToAdd = clipsByTrackId[track.id];
-        if (clipsToAdd && clipsToAdd.length > 0) {
-          return { ...track, clips: [...track.clips, ...clipsToAdd] };
-        }
-        return track;
-      });
-
-      // Select the newly duplicated clips
-      const newSelectedClipIds = newClips.map((clip) => clip.id);
-
-      return {
-        tracks: newTracks,
-        selectedClipIds: newSelectedClipIds,
-      };
-    });
-  },
-
-  addTrack: () =>
-    set((state) => {
-      trackCounter += 1;
-      const color = TRACK_COLORS[(trackCounter - 1) % TRACK_COLORS.length];
-      const newTrack: Track = {
-        id: `track-${Date.now()}`,
-        name: `Track ${trackCounter}`,
-        muted: false,
-        soloed: false,
-        armed: false,
-        volume: 0.8,
-        pan: 0,
-        color,
-        clips: [],
-        compressor: getDefaultCompressorSettings(),
-        gate: getDefaultGateSettings(),
-        eq: getDefaultEQSettings(),
-        reverb: getDefaultReverbSettings(),
-        delay: getDefaultDelaySettings(),
-      };
-      const newTracks = [...state.tracks, newTrack];
-      return {
-        tracks: newTracks,
-        selectedTrackIds: [newTrack.id],
-        activeTrackId: newTrack.id,
-      };
-    }),
-
-  removeTrack: (id) =>
-    set((state) => {
-      const tracks = state.tracks;
-      const removedIndex = findTrackIndex(tracks, id);
-      
-      if (removedIndex === -1) {
-        return state;
-      }
-
-      const newTracks = tracks.filter((t) => t.id !== id);
-      
-      // Update selection and active track
-      let newSelectedTrackIds = state.selectedTrackIds.filter((trackId) => trackId !== id);
-      let newActiveTrackId = state.activeTrackId;
-
-      if (state.activeTrackId === id) {
-        // If the removed track was active, promote the nearest remaining track
-        const nearestIndex = getNearestTrackIndex(tracks, removedIndex);
-        if (nearestIndex !== null && newTracks.length > 0) {
-          newActiveTrackId = newTracks[nearestIndex].id;
-          newSelectedTrackIds = [newActiveTrackId];
-        } else {
-          newActiveTrackId = null;
-          newSelectedTrackIds = [];
-        }
-      } else if (newSelectedTrackIds.length === 0 && newTracks.length > 0) {
-        // If selection is empty but tracks remain, select the first track
-        newActiveTrackId = newTracks[0].id;
-        newSelectedTrackIds = [newActiveTrackId];
-      }
-      
-      return {
-        tracks: newTracks,
-        selectedTrackIds: newSelectedTrackIds,
-        activeTrackId: newActiveTrackId,
-      };
-    }),
-
-  updateTrack: (id, patch) =>
+  // Track and Clip Management
+  addTrack: (track) => {
+    const id = Date.now().toString();
     set((state) => ({
-      tracks: state.tracks.map((t) => (t.id === id ? { ...t, ...patch } : t)),
-    })),
+      tracks: [...state.tracks, { ...track, id, clips: [] }],
+      activeTrackId: state.activeTrackId || id,
+      selectedTrackIds: state.selectedTrackIds.length === 0 ? [id] : state.selectedTrackIds,
+    }));
+  },
 
-  addClip: (trackId, startBeat, durationBeats, name, audioBufferId) =>
-    set((state) => ({
-      tracks: state.tracks.map((t) =>
-        t.id !== trackId
-          ? t
-          : {
-              ...t,
-              clips: [
-                ...t.clips,
-                {
-                  id: generateClipId(),
-                  trackId,
-                  startBeat,
-                  durationBeats,
-                  name,
-                  color: t.color,
-                  audioBufferId,
-                },
-              ],
-            },
-      ),
-    })),
-
-  moveClip: (clipId, fromTrackId, toTrackId, newStartBeat) =>
+  createTracksForClips: (clips, startBeat) => {
     set((state) => {
-      let moving = state.tracks
-        .find((t) => t.id === fromTrackId)
-        ?.clips.find((c) => c.id === clipId);
-      if (!moving) return state;
-      moving = { ...moving, trackId: toTrackId, startBeat: newStartBeat };
-
-      // Dragging a clip to a *different* track makes that track active
-      // (last-interacted track is active, per #151). Dragging within the
-      // same track must NOT touch the selection at all.
-      let newActiveTrackId = state.activeTrackId;
-      let newSelectedTrackIds = state.selectedTrackIds;
-      if (fromTrackId !== toTrackId && state.activeTrackId !== toTrackId) {
-        newActiveTrackId = toTrackId;
-        newSelectedTrackIds = state.selectedTrackIds.includes(toTrackId)
-          ? state.selectedTrackIds
-          : [...state.selectedTrackIds, toTrackId];
-      }
-      
-      return {
-        tracks: state.tracks.map((t) => {
-          if (t.id === fromTrackId && t.id !== toTrackId) {
-            return { ...t, clips: t.clips.filter((c) => c.id !== clipId) };
-          }
-          if (t.id === toTrackId && t.id !== fromTrackId) {
-            return { ...t, clips: [...t.clips, moving!] };
-          }
-          if (t.id === fromTrackId && t.id === toTrackId) {
-            // Same track: replace in-place
-            return { ...t, clips: t.clips.map((c) => (c.id === clipId ? moving! : c)) };
-          }
-          return t;
-        }),
-        selectedTrackIds: newSelectedTrackIds,
-        activeTrackId: newActiveTrackId,
-      };
-    }),
-
-  createTracksForClips: (clipData, startBeat) =>
-    set((state) => {
-      const now = Date.now();
-      const newTracks = clipData.map((data, i) => {
-        trackCounter += 1;
-        const color = TRACK_COLORS[(trackCounter - 1) % TRACK_COLORS.length];
-        const trackId = `track-${now}-${i}`;
+      const newTracks: Track[] = clips.map((clip, index) => {
+        const id = `${Date.now()}-${index}`;
         return {
-          id: trackId,
-          name: data.name,
+          id,
+          name: clip.name,
           muted: false,
           soloed: false,
           armed: false,
-          volume: 0.8,
+          volume: 1,
           pan: 0,
-          color,
-          clips: [
-            {
-              id: generateClipId(),
-              trackId,
-              startBeat,
-              durationBeats: data.durationBeats,
-              name: data.name,
-              color,
-              audioBufferId: data.audioBufferId,
-            },
-          ],
-          compressor: getDefaultCompressorSettings(),
-          gate: getDefaultGateSettings(),
-          eq: getDefaultEQSettings(),
-          reverb: getDefaultReverbSettings(),
-          delay: getDefaultDelaySettings(),
+          color: '#4f46e5',
+          clips: [{
+            ...clip,
+            id: generateClipId(),
+            trackId: id,
+            color: '#4f46e5',
+            startBeat,
+          }],
         };
       });
-      
-      const allTracks = [...state.tracks, ...newTracks];
-      // Set the first new track as active and selected. Explicit string[]
-      // typing keeps TS from widening newActiveTrackId to string | null and
-      // inferring (string | null)[] for the selection.
-      const newActiveTrackId: string | null =
-        newTracks.length > 0 ? newTracks[0].id : state.activeTrackId;
-      const newSelectedTrackIds: string[] =
-        newTracks.length > 0 ? [newTracks[0].id] : state.selectedTrackIds;
-      
+
       return {
-        tracks: allTracks,
-        selectedTrackIds: newSelectedTrackIds,
-        activeTrackId: newActiveTrackId,
+        tracks: [...state.tracks, ...newTracks],
+        activeTrackId: newTracks[0]?.id ?? state.activeTrackId,
+        selectedTrackIds: newTracks.length > 0 ? [newTracks[0].id] : state.selectedTrackIds,
       };
-    }),
+    });
+  },
 
-  splitClipsAt: (beats: number[], trackIds?: string[]) =>
-    set((state) => {
-      // Determine which tracks to split on
-      let targetTrackIds: string[];
-      if (trackIds) {
-        // Explicit trackIds provided
-        targetTrackIds = trackIds;
-      } else if (state.selectedTrackIds.length > 0) {
-        // Use selected tracks (which includes active track by invariant)
-        targetTrackIds = state.selectedTrackIds;
-      } else if (state.activeTrackId) {
-        // Fallback to active track
-        targetTrackIds = [state.activeTrackId];
-      } else {
-        // Defensive: no selection and no active track - warn and use all tracks
-        console.warn('splitClipsAt called with no selected tracks and no active track - splitting all tracks');
-        targetTrackIds = state.tracks.map(t => t.id);
-      }
-      
-      // Warn if no tracks would be affected
-      if (targetTrackIds.length === 0) {
-        console.warn('splitClipsAt called with empty track selection - no tracks will be split');
-        return state;
-      }
-      
-      // Push current state to undo stack
-      pushToUndoStack(state.tracks);
-      
-      // Create a filter function for the target tracks
-      const trackFilter = (trackId: string) => targetTrackIds.includes(trackId);
-      
-      // Apply splits sequentially for each boundary
-      let newTracks = [...state.tracks];
-      for (const boundary of beats) {
-        newTracks = splitClipsAtBoundary(newTracks, boundary, trackFilter);
-      }
-      return { tracks: newTracks };
-    }),
-
-  undoSplit: () =>
-    set((state) => {
-      if (undoStack.length === 0) return state;
-      const previousTracks = undoStack.pop()!;
-      return { tracks: previousTracks };
-    }),
-
-  trimClip: (clipId, patch) =>
-    set((state) => {
-      // Find the clip and its track
-      const result = findClipAndTrack(state.tracks, clipId);
-      if (!result) {
-        console.warn(`trimClip: clip ${clipId} not found`);
-        return state;
-      }
-      
-      const { clip, track, trackIndex } = result;
-      
-      // Check if the patch would result in an invalid clip
-      const newDuration = patch.durationBeats;
-      const newBufferOffset = patch.bufferOffsetBeats ?? clip.bufferOffsetBeats ?? 0;
-      
-      // Validate minimum duration
-      if (newDuration < MIN_CLIP_BEATS) {
-        console.warn(`trimClip: resulting duration ${newDuration} is below minimum ${MIN_CLIP_BEATS}`);
-        return state;
-      }
-      
-      // Validate buffer offset is non-negative
-      if (newBufferOffset < 0) {
-        console.warn(`trimClip: bufferOffsetBeats ${newBufferOffset} is negative`);
-        return state;
-      }
-      
-      // Check if the patch actually changes anything
-      const noChange = 
-        patch.startBeat === clip.startBeat &&
-        (patch.bufferOffsetBeats ?? clip.bufferOffsetBeats) === (clip.bufferOffsetBeats ?? 0) &&
-        patch.durationBeats === clip.durationBeats;
-      
-      if (noChange) {
-        // No change, don't push to undo stack
-        return state;
-      }
-      
-      // Push current state to undo stack
-      pushToUndoStack(state.tracks);
-      
-      // Apply the patch to the clip
-      const newClip: Clip = {
-        ...clip,
-        startBeat: patch.startBeat,
-        bufferOffsetBeats: patch.bufferOffsetBeats,
-        durationBeats: patch.durationBeats,
-      };
-      
-      // Create new tracks array with the updated clip
-      const newTracks = [...state.tracks];
-      const newTrack = {
-        ...track,
-        clips: track.clips.map((c) => (c.id === clipId ? newClip : c)),
-      };
-      newTracks[trackIndex] = newTrack;
-      
-      return { tracks: newTracks };
-    }),
+  updateTrack: (trackId, updates) => {
+    set((state) => ({
+      tracks: state.tracks.map((track) =>
+        track.id === trackId ? { ...track, ...updates } : track
+      ),
+    }));
+  },
 
   setTracks: (tracks) => {
     set({
       tracks,
-      selectedTrackIds: tracks.length > 0 ? [tracks[0].id] : [],
-      activeTrackId: tracks.length > 0 ? tracks[0].id : null,
+      selectedTrackIds: [],
+      activeTrackId: null,
+      selectedClipIds: [],
+      undoStack: [],
+      redoStack: [],
     });
   },
 
-  clearTracks: () => set({ tracks: [], selectedTrackIds: [], activeTrackId: null, selectedClipIds: [], clipboard: [] }),
+  clearTracks: () => {
+    set({
+      tracks: [],
+      selectedTrackIds: [],
+      activeTrackId: null,
+      selectedClipIds: [],
+      undoStack: [],
+      redoStack: [],
+    });
+  },
+
+  removeTrack: (trackId) => {
+    set((state) => ({
+      tracks: state.tracks.filter((t) => t.id !== trackId),
+      selectedTrackIds: state.selectedTrackIds.filter((id) => id !== trackId),
+      activeTrackId: state.activeTrackId === trackId ? null : state.activeTrackId,
+    }));
+  },
+
+  setActiveTrack: (trackId) => {
+    set({ activeTrackId: trackId });
+  },
+
+  selectTrack: (trackId, mode) => {
+    set((state) => {
+      if (mode === 'replace') {
+        return { selectedTrackIds: [trackId], activeTrackId: trackId };
+      }
+      if (mode === 'toggle') {
+        return {
+          selectedTrackIds: state.selectedTrackIds.includes(trackId)
+            ? state.selectedTrackIds.filter((id) => id !== trackId)
+            : [...state.selectedTrackIds, trackId],
+        };
+      }
+      if (mode === 'range' && state.activeTrackId) {
+        const anchor = state.tracks.findIndex((track) => track.id === state.activeTrackId);
+        const target = state.tracks.findIndex((track) => track.id === trackId);
+        if (anchor !== -1 && target !== -1) {
+          return {
+            selectedTrackIds: state.tracks
+              .slice(Math.min(anchor, target), Math.max(anchor, target) + 1)
+              .map((track) => track.id),
+          };
+        }
+      }
+      return {
+        selectedTrackIds: state.selectedTrackIds.includes(trackId)
+          ? state.selectedTrackIds
+          : [...state.selectedTrackIds, trackId],
+      };
+    });
+  },
+
+  deselectTrack: (trackId) => {
+    set((state) => ({
+      selectedTrackIds: state.selectedTrackIds.filter((id) => id !== trackId),
+    }));
+  },
+
+  selectOnlyTrack: (trackId) => {
+    set({
+      selectedTrackIds: [trackId],
+      activeTrackId: trackId,
+    });
+  },
+
+  toggleTrackSelection: (trackId) => {
+    set((state) => ({
+      selectedTrackIds: state.selectedTrackIds.includes(trackId)
+        ? state.selectedTrackIds.filter((id) => id !== trackId)
+        : [...state.selectedTrackIds, trackId],
+    }));
+  },
+
+  clearSelectedTracks: () => {
+    set({ selectedTrackIds: [] });
+  },
+
+  addClipToTrack: (trackId, clip) => {
+    set((state) => ({
+      tracks: state.tracks.map((track) =>
+        track.id === trackId
+          ? {
+              ...track,
+              clips: [...track.clips, {
+                ...clip,
+                id: generateClipId(),
+                trackId,
+                color: clip.color ?? track.color,
+              }],
+            }
+          : track
+      ),
+    }));
+  },
+
+  addClip: ((trackId: string, clipOrStartBeat: number | (Omit<Clip, 'id' | 'trackId' | 'color'> & Partial<Pick<Clip, 'trackId' | 'color'>>), durationBeats?: number, name?: string, audioBufferId?: string) => {
+    const clip = typeof clipOrStartBeat === 'number'
+      ? {
+          startBeat: clipOrStartBeat,
+          durationBeats: durationBeats ?? 0,
+          name: name ?? 'Audio',
+          audioBufferId,
+        }
+      : clipOrStartBeat;
+    useTrackStore.getState().addClipToTrack(trackId, clip);
+  }) as TrackState['addClip'],
+
+  removeClipFromTrack: (trackId, clipId) => {
+    set((state) => ({
+      tracks: state.tracks.map((track) =>
+        track.id === trackId
+          ? { ...track, clips: track.clips.filter((c) => c.id !== clipId) }
+          : track
+      ),
+    }));
+  },
+
+  updateClip: (trackId, clipId, updates) => {
+    set((state) => ({
+      tracks: state.tracks.map((track) =>
+        track.id === trackId
+          ? {
+              ...track,
+              clips: track.clips.map((clip) =>
+                clip.id === clipId ? { ...clip, ...updates } : clip
+              ),
+            }
+          : track
+      ),
+    }));
+  },
+
+  selectClip: (clipId, additive = false) => {
+    set((state) => ({
+      selectedClipIds: additive
+        ? state.selectedClipIds.includes(clipId)
+          ? state.selectedClipIds
+          : [...state.selectedClipIds, clipId]
+        : [clipId],
+    }));
+  },
+
+  deselectClip: (clipId) => {
+    set((state) => ({
+      selectedClipIds: state.selectedClipIds.filter((id) => id !== clipId),
+    }));
+  },
+
+  selectOnlyClip: (clipId) => {
+    set({ selectedClipIds: [clipId] });
+  },
+
+  toggleClipSelection: (clipId) => {
+    set((state) => ({
+      selectedClipIds: state.selectedClipIds.includes(clipId)
+        ? state.selectedClipIds.filter((id) => id !== clipId)
+        : [...state.selectedClipIds, clipId],
+    }));
+  },
+
+  clearSelectedClips: () => {
+    set({ selectedClipIds: [] });
+  },
+
+  splitClip: (trackId, clipId, splitBeat) => {
+    set((state) => {
+      const track = state.tracks.find((t) => t.id === trackId);
+      if (!track) return state;
+
+      const clip = track.clips.find((c) => c.id === clipId);
+      if (!clip) return state;
+
+      if (splitBeat <= clip.startBeat || splitBeat >= clip.startBeat + clip.durationBeats) {
+        return state;
+      }
+
+      const newClip = {
+        ...clip,
+        id: generateClipId(),
+        startBeat: splitBeat,
+        durationBeats: clip.startBeat + clip.durationBeats - splitBeat,
+        bufferOffsetBeats: (clip.bufferOffsetBeats ?? 0) + splitBeat - clip.startBeat,
+      };
+
+      const updatedClip = {
+        ...clip,
+        durationBeats: splitBeat - clip.startBeat,
+      };
+
+      return {
+        tracks: state.tracks.map((t) =>
+          t.id === trackId
+            ? {
+                ...t,
+                clips: t.clips
+                  .filter((c) => c.id !== clipId)
+                  .concat([updatedClip, newClip]),
+              }
+            : t
+        ),
+      };
+    });
+  },
+
+  trimClip: (clipId, updates) => {
+    set((state) => {
+      let found = false;
+      const tracks = state.tracks.map((track) => ({
+        ...track,
+        clips: track.clips.map((clip) => {
+          if (clip.id !== clipId) return clip;
+          found = true;
+          return { ...clip, ...updates };
+        }),
+      }));
+      return found ? { tracks } : state;
+    });
+  },
+
+  splitClipsAt: (splitBeats) => {
+    set((state) => {
+      const boundaries = [...new Set(splitBeats.filter(Number.isFinite))].sort((a, b) => a - b);
+      let didSplit = false;
+      const tracks = state.tracks.map((track) => ({
+        ...track,
+        clips: track.clips.flatMap((clip) => {
+          const clipBoundaries = boundaries.filter(
+            (beat) => beat > clip.startBeat && beat < clip.startBeat + clip.durationBeats
+          );
+          if (clipBoundaries.length === 0) return [clip];
+
+          didSplit = true;
+          const splitPoints = [clip.startBeat, ...clipBoundaries, clip.startBeat + clip.durationBeats];
+          return splitPoints.slice(1).map((endBeat, index) => ({
+            ...clip,
+            id: index === 0 ? clip.id : generateClipId(),
+            startBeat: splitPoints[index],
+            durationBeats: endBeat - splitPoints[index],
+            bufferOffsetBeats: (clip.bufferOffsetBeats ?? 0) + splitPoints[index] - clip.startBeat,
+          }));
+        }),
+      }));
+
+      if (!didSplit) return state;
+      return {
+        tracks,
+        undoStack: [...state.undoStack, state.tracks],
+        redoStack: [],
+      };
+    });
+  },
+
+  quantizeSelected: (gridBeats) => {
+    set((state) => {
+      if (!Number.isFinite(gridBeats) || gridBeats <= 0) return state;
+
+      let didQuantize = false;
+      const tracks = state.tracks.map((track) => ({
+        ...track,
+        clips: track.clips.map((clip) => {
+          if (!state.selectedClipIds.includes(clip.id)) return clip;
+          const startBeat = Math.round(clip.startBeat / gridBeats) * gridBeats;
+          if (startBeat === clip.startBeat) return clip;
+          didQuantize = true;
+          return { ...clip, startBeat };
+        }),
+      }));
+
+      if (!didQuantize) return state;
+      return {
+        tracks,
+        undoStack: [...state.undoStack, state.tracks],
+        redoStack: [],
+      };
+    });
+  },
+
+  trimClipStart: (trackId, clipId, newStartBeat) => {
+    set((state) => {
+      const track = state.tracks.find((t) => t.id === trackId);
+      if (!track) return state;
+
+      const clip = track.clips.find((c) => c.id === clipId);
+      if (!clip) return state;
+
+      if (newStartBeat >= clip.startBeat + clip.durationBeats) return state;
+
+      const updatedClip = {
+        ...clip,
+        startBeat: newStartBeat,
+        durationBeats: clip.startBeat + clip.durationBeats - newStartBeat,
+      };
+
+      return {
+        tracks: state.tracks.map((t) =>
+          t.id === trackId
+            ? {
+                ...t,
+                clips: t.clips.map((c) => (c.id === clipId ? updatedClip : c)),
+              }
+            : t
+        ),
+      };
+    });
+  },
+
+  trimClipEnd: (trackId, clipId, newEndBeat) => {
+    set((state) => {
+      const track = state.tracks.find((t) => t.id === trackId);
+      if (!track) return state;
+
+      const clip = track.clips.find((c) => c.id === clipId);
+      if (!clip) return state;
+
+      if (newEndBeat <= clip.startBeat) return state;
+
+      const updatedClip = {
+        ...clip,
+        durationBeats: newEndBeat - clip.startBeat,
+      };
+
+      return {
+        tracks: state.tracks.map((t) =>
+          t.id === trackId
+            ? {
+                ...t,
+                clips: t.clips.map((c) => (c.id === clipId ? updatedClip : c)),
+              }
+            : t
+        ),
+      };
+    });
+  },
+
+  moveClip: (clipId, newTrackId, newStartBeat) => {
+    set((state) => {
+      const sourceTrack = state.tracks.find((t) => t.clips.some((c) => c.id === clipId));
+      if (!sourceTrack) return state;
+
+      const clip = sourceTrack.clips.find((c) => c.id === clipId);
+      if (!clip) return state;
+
+      return {
+        tracks: state.tracks.map((track) => {
+          if (track.id === sourceTrack.id) {
+            return {
+              ...track,
+              clips: track.clips.filter((c) => c.id !== clipId),
+            };
+          }
+          if (track.id === newTrackId) {
+            return {
+              ...track,
+              clips: [...track.clips, { ...clip, startBeat: newStartBeat, trackId: newTrackId }],
+            };
+          }
+          return track;
+        }),
+      };
+    });
+  },
+
+  resizeClip: (trackId, clipId, newStartBeat, newDuration) => {
+    set((state) => {
+      return {
+        tracks: state.tracks.map((track) =>
+          track.id === trackId
+            ? {
+                ...track,
+                clips: track.clips.map((clip) =>
+                  clip.id === clipId
+                    ? { ...clip, startBeat: newStartBeat, durationBeats: newDuration }
+                    : clip
+                ),
+              }
+            : track
+        ),
+      };
+    });
+  },
+
+  cutSelectedClips: () => {
+    set((state) => {
+      const selectedClips = getSelectedClips(state.tracks, state.selectedClipIds);
+      if (selectedClips.length === 0) return state;
+
+      const newTracks = state.tracks.map((track) => ({
+        ...track,
+        clips: track.clips.filter((clip) => !state.selectedClipIds.includes(clip.id)),
+      }));
+
+      return {
+        tracks: newTracks,
+        clipboard: selectedClips.map(({ clip }) => clip),
+        selectedClipIds: [],
+      };
+    });
+  },
+
+  copySelectedClips: () => {
+    set((state) => {
+      const selectedClips = getSelectedClips(state.tracks, state.selectedClipIds);
+      if (selectedClips.length === 0) return state;
+
+      return {
+        clipboard: selectedClips.map(({ clip }) => clip),
+      };
+    });
+  },
+
+  pasteClips: (targetTrackId, targetStartBeat) => {
+    set((state) => {
+      if (state.clipboard.length === 0) return state;
+
+      const batchStart = Math.min(...state.clipboard.map((clip) => clip.startBeat));
+      const offset = targetStartBeat - batchStart;
+
+      const newClips = state.clipboard.map((clip) => ({
+        ...clip,
+        id: generateClipId(),
+        startBeat: clip.startBeat + offset,
+        trackId: targetTrackId,
+      }));
+
+      return {
+        tracks: state.tracks.map((track) =>
+          track.id === targetTrackId
+            ? { ...track, clips: [...track.clips, ...newClips] }
+            : track
+        ),
+        selectedClipIds: newClips.map((clip) => clip.id),
+      };
+    });
+  },
+
+  deleteSelectedClips: () => {
+    set((state) => {
+      const newTracks = state.tracks.map((track) => ({
+        ...track,
+        clips: track.clips.filter((clip) => !state.selectedClipIds.includes(clip.id)),
+      }));
+
+      return {
+        tracks: newTracks,
+        selectedClipIds: [],
+      };
+    });
+  },
+
+  undo: () => {
+    set((state) => {
+      if (state.undoStack.length === 0) return state;
+
+      const previousState = state.undoStack[state.undoStack.length - 1];
+      return {
+        tracks: previousState,
+        undoStack: state.undoStack.slice(0, -1),
+        redoStack: [...state.redoStack, state.tracks],
+      };
+    });
+  },
+
+  redo: () => {
+    set((state) => {
+      if (state.redoStack.length === 0) return state;
+
+      const nextState = state.redoStack[state.redoStack.length - 1];
+      return {
+        tracks: nextState,
+        undoStack: [...state.undoStack, state.tracks],
+        redoStack: state.redoStack.slice(0, -1),
+      };
+    });
+  },
 
   // New functions for multi-track controls
   toggleArmSelected: () => {
@@ -844,4 +690,66 @@ export const useTrackStore = create<TrackState>((set) => ({
       };
     });
   },
+
+  duplicateSelected: () => {
+    set((state) => {
+      const selectedClips = getSelectedClips(state.tracks, state.selectedClipIds);
+      if (selectedClips.length === 0) return state;
+      
+      // Push current state to undo stack
+      const newUndoStack = [...state.undoStack, state.tracks];
+      
+      // Calculate batchStart and batchEnd
+      const batchStart = Math.min(...selectedClips.map(({ clip }) => clip.startBeat));
+      const batchEnd = Math.max(...selectedClips.map(({ clip }) => clip.startBeat + clip.durationBeats));
+      const offset = batchEnd - batchStart;
+      
+      // Create new clips with fresh IDs and offset positions
+      const newClips: Clip[] = selectedClips.map(({ clip }) => ({
+        ...clip,
+        id: generateClipId(),
+        startBeat: clip.startBeat + offset,
+      }));
+      
+      // Build a map of trackId -> clips to duplicate
+      const clipsByTrackId: Record<string, Clip[]> = {};
+      for (const clip of newClips) {
+        if (!clipsByTrackId[clip.trackId]) {
+          clipsByTrackId[clip.trackId] = [];
+        }
+        clipsByTrackId[clip.trackId].push(clip);
+      }
+      
+      // Add duplicated clips to their original tracks
+      const newTracks = state.tracks.map((track) => {
+        const clipsToAdd = clipsByTrackId[track.id];
+        if (clipsToAdd && clipsToAdd.length > 0) {
+          return { ...track, clips: [...track.clips, ...clipsToAdd] };
+        }
+        return track;
+      });
+      
+      // Select the newly duplicated clips
+      const newSelectedClipIds = newClips.map((clip) => clip.id);
+      
+      return {
+        tracks: newTracks,
+        selectedClipIds: newSelectedClipIds,
+        undoStack: newUndoStack,
+        redoStack: [],
+      };
+    });
+  },
+  
+  // Reorder tracks by moving a track from one index to another
+  reorderTrack: (fromIndex: number, toIndex: number) => {
+    set((state) => {
+      const newTracks = [...state.tracks];
+      const [trackToMove] = newTracks.splice(fromIndex, 1);
+      newTracks.splice(toIndex, 0, trackToMove);
+      return { tracks: newTracks };
+    });
+  },
 }));
+
+export default useTrackStore;

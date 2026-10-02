@@ -1,5 +1,5 @@
 .wrapper {
-  width: var(--header-width);
+  width: calc(var(--header-width) + 20px); /* Increase width by 20px */
   flex-shrink: 0;
   display: flex;
   flex-direction: column;
@@ -41,7 +41,11 @@
   height: var(--track-height);
   border-bottom: 1px solid var(--border);
   flex-shrink: 0;
-  cursor: pointer;
+  cursor: grab;
+}
+
+.row:active {
+  cursor: grabbing;
 }
 
 .row:nth-child(even) {
@@ -74,11 +78,27 @@
   outline-offset: -2px;
 }
 
+/* Drop target state */
+.rowDropTarget {
+  border-top: 2px solid var(--accent);
+  /* Add a subtle highlight to indicate drop target */
+  background-color: color-mix(in srgb, var(--bg-2) 90%, var(--accent) 10%) !important;
+}
+
+.rowDropTarget:nth-child(even) {
+  background-color: color-mix(in srgb, var(--bg-1) 90%, var(--accent) 10%) !important;
+}
+
+/* Dragging state */
+.rowDragging {
+  opacity: 0.5;
+}
+
 .rowMain {
   display: flex;
   flex-direction: column;
   justify-content: center;
-  padding: 2px 2px;
+  padding: 2px 8px; /* Increase horizontal padding for better grab area */
   gap: 6px;
   flex: 1;
   min-width: 0;
