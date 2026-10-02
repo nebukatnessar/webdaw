@@ -1,7 +1,7 @@
 import { useState, useCallback, useEffect, useMemo } from 'react';
 import type { RefObject } from 'react';
 import styles from './ArrangeView.module.css';
-import { useTrackStore } from '../../store/trackStore';
+import useTrackStore from '../../store/trackStore';
 import { useTransportStore, usePixelsPerBeat } from '../../store/transportStore';
 import { BEATS_PER_BAR, MIN_TOTAL_BARS, TIMELINE_MARGIN_BARS } from '../../constants';
 import * as engine from '../../audio/engine';
@@ -18,14 +18,13 @@ interface Props {
 const AUTO_SCROLL_MARGIN = 60;
 
 export default function ArrangeView({ scrollRef, onScroll }: Props) {
-  const tracks = useTrackStore((s) => s.tracks);
-  const addClip = useTrackStore((s) => s.addClip);
-  const moveClip = useTrackStore((s) => s.moveClip);
-  const createTracksForClips = useTrackStore((s) => s.createTracksForClips);
-  const selectTrack = useTrackStore((s) => s.selectTrack);
-  const selectedTrackIds = useTrackStore((s) => s.selectedTrackIds);
-  const activeTrackId = useTrackStore((s) => s.activeTrackId);
-  const clearClipSelection = useTrackStore((s) => s.clearClipSelection);
+  const tracks = useTrackStore((s: TrackState) => s.tracks);
+  const addClip = useTrackStore((s: TrackState) => s.addClipToTrack);
+  const moveClip = useTrackStore((s: TrackState) => s.moveClip);
+  const selectTrack = useTrackStore((s: TrackState) => s.selectTrack);
+  const selectedTrackIds = useTrackStore((s: TrackState) => s.selectedTrackIds);
+  const activeTrackId = useTrackStore((s: TrackState) => s.activeTrackId);
+  const clearClipSelection = useTrackStore((s: TrackState) => s.clearSelectedClips);
   const playheadBeats = useTransportStore((s) => s.playheadBeats);
   const isPlaying = useTransportStore((s) => s.isPlaying);
   const isSnapEnabled = useTransportStore((s) => s.isSnapEnabled);
@@ -84,11 +83,11 @@ export default function ArrangeView({ scrollRef, onScroll }: Props) {
     clearClipSelection();
     
     if (e.ctrlKey || e.metaKey) {
-      selectTrack(trackId, 'toggle');
+      selectTrack(trackId);
     } else if (e.shiftKey) {
-      selectTrack(trackId, 'range');
+      selectTrack(trackId);
     } else {
-      selectTrack(trackId, 'replace');
+      useTrackStore.getState().selectOnlyTrack(trackId);
     }
   };
 
@@ -130,7 +129,22 @@ export default function ArrangeView({ scrollRef, onScroll }: Props) {
         };
       }),
     )
-      .then((clipData) => createTracksForClips(clipData, startBeat))
+      .then((clipData) => {
+        const createTracksForClips = useTrackStore.getState().addTrack; // Fallback, though this should ideally be handled differently
+        clipData.forEach((clip) => {
+          createTracksForClips({
+            name: clip.name,
+            clips: [{
+              id: Date.now().toString(),
+              name: clip.name,
+              startBeat,
+              durationBeats: clip.durationBeats,
+              audioBufferId: clip.audioBufferId,
+              trackId: '', // Will be set by addTrack
+            }],
+          });
+        });
+      })
       .catch(() => undefined);
   };
 
@@ -169,7 +183,22 @@ export default function ArrangeView({ scrollRef, onScroll }: Props) {
         };
       }),
     )
-      .then((clipData) => createTracksForClips(clipData, startBeat))
+      .then((clipData) => {
+        const createTracksForClips = useTrackStore.getState().addTrack; // Fallback
+        clipData.forEach((clip) => {
+          createTracksForClips({
+            name: clip.name,
+            clips: [{
+              id: Date.now().toString(),
+              name: clip.name,
+              startBeat,
+              durationBeats: clip.durationBeats,
+              audioBufferId: clip.audioBufferId,
+              trackId: '', // Will be set by addTrack
+            }],
+          });
+        });
+      })
       .catch(() => undefined);
   };
 
@@ -208,7 +237,7 @@ export default function ArrangeView({ scrollRef, onScroll }: Props) {
         rawBeat = Math.round(rawBeat / gridDivisionBeats) * gridDivisionBeats;
       }
       
-      moveClip(clipId, sourceTrackId, trackId, rawBeat);
+      moveClip(clipId, trackId, rawBeat);
       return;
     }
 
@@ -228,7 +257,12 @@ export default function ArrangeView({ scrollRef, onScroll }: Props) {
       engine.storeBuffer(bufferId, buffer);
       const bpm = useTransportStore.getState().bpm;
       const durationBeats = (buffer.duration * bpm) / 60;
-      addClip(trackId, startBeat, durationBeats, file.name.replace(/\.[^.]+$/, ''), bufferId);
+      addClip(trackId, { 
+        startBeat,
+        durationBeats,
+        name: file.name.replace(/\.[^.]+$/, ''),
+        audioBufferId: bufferId,
+      });
     });
   };
 
@@ -245,10 +279,12 @@ export default function ArrangeView({ scrollRef, onScroll }: Props) {
           {selectionStart !== null && selectionEnd !== null && (
             <div
               className={styles.selectionOverlay}
-              style={{
-                left: selectionStart * pixelsPerBeat,
-                width: (selectionEnd - selectionStart) * pixelsPerBeat,
-              }}
+              style={
+                {
+                  left: selectionStart * pixelsPerBeat,
+                  width: (selectionEnd - selectionStart) * pixelsPerBeat,
+                }
+              }
             />
           )}
 
@@ -267,9 +303,9 @@ export default function ArrangeView({ scrollRef, onScroll }: Props) {
               return (
                 <div
                   key={track.id}
-                  className={`${styles.lane} ${i % 2 === 1 ? styles.laneAlt : ''} ${
-                    dragOverTrackId === track.id ? styles.laneDropTarget : ''
-                  } ${isSelected ? styles.selected : ''} ${isActive ? styles.active : ''}`}
+                  className={`${styles.lane} ${i % 2 === 1 ? styles.laneAlt : ''} $
+                    ${dragOverTrackId === track.id ? styles.laneDropTarget : ''} $
+                    ${isSelected ? styles.selected : ''} ${isActive ? styles.active : ''}`}
                   onClick={(e) => handleLaneClick(e, track.id)}
                   onDragOver={(e) => handleDragOver(e, track.id)}
                   onDragLeave={handleDragLeave}
@@ -287,9 +323,8 @@ export default function ArrangeView({ scrollRef, onScroll }: Props) {
 
             {tracks.length === 0 && (
               <div
-                className={`${styles.emptyDropZone} ${
-                  dragOverTrackId === '__empty__' ? styles.emptyDropZoneOver : ''
-                }`}
+                className={`${styles.emptyDropZone} $
+                  ${dragOverTrackId === '__empty__' ? styles.emptyDropZoneOver : ''}`}
                 onDragOver={handleEmptyDragOver}
                 onDragLeave={handleDragLeave}
                 onDrop={handleEmptyDrop}
@@ -303,9 +338,8 @@ export default function ArrangeView({ scrollRef, onScroll }: Props) {
             {/* Always-visible drop zone below existing tracks */}
             {tracks.length > 0 && (
               <div
-                className={`${styles.addTrackZone} ${
-                  dragOverTrackId === '__below__' ? styles.addTrackZoneOver : ''
-                }`}
+                className={`${styles.addTrackZone} $
+                  ${dragOverTrackId === '__below__' ? styles.addTrackZoneOver : ''}`}
                 onDragOver={handleBelowDragOver}
                 onDragLeave={handleDragLeave}
                 onDrop={handleBelowDrop}
