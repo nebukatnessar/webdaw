@@ -30,6 +30,9 @@ export default function TrackHeaderList({ scrollRef, onScroll }: Props) {
   const [isDropOver, setIsDropOver] = useState(false);
   const [draggedTrackId, setDraggedTrackId] = useState<string | null>(null);
   const [dragOverTrackId, setDragOverTrackId] = useState<string | null>(null);
+  const [dragStartX, setDragStartX] = useState<number | null>(null);
+  const [dragStartY, setDragStartY] = useState<number | null>(null);
+  const DRAG_THRESHOLD = 5; // Pixels to distinguish intentional drags
 
   // State for EffectsDialog
   const [openDialogTrackId, setOpenDialogTrackId] = useState<string | null>(null);
@@ -79,10 +82,21 @@ export default function TrackHeaderList({ scrollRef, onScroll }: Props) {
     e.dataTransfer.setData('text/x-track-id', trackId);
     e.dataTransfer.effectAllowed = 'move';
     setDraggedTrackId(trackId);
+    setDragStartX(e.clientX);
+    setDragStartY(e.clientY);
   };
 
   const handleDragOverTrack = (e: React.DragEvent, trackId: string) => {
-    if (!draggedTrackId) return;
+    if (!draggedTrackId || !dragStartX || !dragStartY) return;
+    
+    // Ignore horizontal drags (allow slider adjustments)
+    const deltaX = Math.abs(e.clientX - dragStartX);
+    const deltaY = Math.abs(e.clientY - dragStartY);
+    if (deltaX > DRAG_THRESHOLD && deltaX > deltaY) {
+      e.dataTransfer.effectAllowed = 'none';
+      return;
+    }
+    
     e.preventDefault();
     e.dataTransfer.dropEffect = 'move';
     setDragOverTrackId(trackId);
@@ -99,6 +113,11 @@ export default function TrackHeaderList({ scrollRef, onScroll }: Props) {
     e.preventDefault();
     setDragOverTrackId(null);
     setDraggedTrackId(null);
+    setDragStartX(null);
+    setDragStartY(null);
+    
+    // Skip if drag was horizontal
+    if (e.dataTransfer.effectAllowed === 'none') return;
     
     const draggedTrackId = e.dataTransfer.getData('text/x-track-id');
     if (!draggedTrackId || draggedTrackId === dropTrackId) return;
@@ -114,6 +133,8 @@ export default function TrackHeaderList({ scrollRef, onScroll }: Props) {
   const handleDragEnd = () => {
     setDraggedTrackId(null);
     setDragOverTrackId(null);
+    setDragStartX(null);
+    setDragStartY(null);
   };
 
   // Handle row click for track selection
