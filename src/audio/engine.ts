@@ -1,6 +1,6 @@
 import type { Track } from '../types/daw';
 import { cacheBuffer } from './bufferCache';
-import { useTrackStore } from '../store/trackStore';
+import useTrackStore from '../store/trackStore';
 import { rmsFromAnalyser } from './meterUtils';
 import {
   getOrCreateCompressorNode,
@@ -202,7 +202,7 @@ export function updateLiveTrackParams(tracks: Track[]): void {
   }
 }
 
-useTrackStore.subscribe((state) => updateLiveTrackParams(state.tracks));
+useTrackStore.subscribe((state: TrackState) => updateLiveTrackParams(state.tracks));
 
 export function getAudioContext(): AudioContext {
   if (!audioCtx) audioCtx = new AudioContext();
