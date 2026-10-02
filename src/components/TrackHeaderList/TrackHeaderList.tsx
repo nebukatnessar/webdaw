@@ -30,6 +30,10 @@ export default function TrackHeaderList({ scrollRef, onScroll }: Props) {
   const [isDropOver, setIsDropOver] = useState(false);
   const [draggedTrackId, setDraggedTrackId] = useState<string | null>(null);
   const [dragOverTrackId, setDragOverTrackId] = useState<string | null>(null);
+  const [dragStartX, setDragStartX] = useState<number | null>(null);
+  const [dragStartY, setDragStartY] = useState<number | null>(null);
+  const [rowDraggable, setRowDraggable] = useState(true);
+  const DRAG_THRESHOLD = 15; // Pixels to distinguish intentional drags
 
   // State for EffectsDialog
   const [openDialogTrackId, setOpenDialogTrackId] = useState<string | null>(null);
@@ -79,10 +83,21 @@ export default function TrackHeaderList({ scrollRef, onScroll }: Props) {
     e.dataTransfer.setData('text/x-track-id', trackId);
     e.dataTransfer.effectAllowed = 'move';
     setDraggedTrackId(trackId);
+    setDragStartX(e.clientX);
+    setDragStartY(e.clientY);
   };
 
   const handleDragOverTrack = (e: React.DragEvent, trackId: string) => {
-    if (!draggedTrackId) return;
+    if (!draggedTrackId || !dragStartX || !dragStartY) return;
+    
+    // Ignore horizontal drags (allow slider adjustments)
+    const deltaX = Math.abs(e.clientX - dragStartX);
+    const deltaY = Math.abs(e.clientY - dragStartY);
+    if (deltaX > DRAG_THRESHOLD && deltaX > deltaY) {
+      e.dataTransfer.effectAllowed = 'none';
+      return;
+    }
+    
     e.preventDefault();
     e.dataTransfer.dropEffect = 'move';
     setDragOverTrackId(trackId);
@@ -99,6 +114,11 @@ export default function TrackHeaderList({ scrollRef, onScroll }: Props) {
     e.preventDefault();
     setDragOverTrackId(null);
     setDraggedTrackId(null);
+    setDragStartX(null);
+    setDragStartY(null);
+    
+    // Skip if drag was horizontal
+    if (e.dataTransfer.effectAllowed === 'none') return;
     
     const draggedTrackId = e.dataTransfer.getData('text/x-track-id');
     if (!draggedTrackId || draggedTrackId === dropTrackId) return;
@@ -114,6 +134,8 @@ export default function TrackHeaderList({ scrollRef, onScroll }: Props) {
   const handleDragEnd = () => {
     setDraggedTrackId(null);
     setDragOverTrackId(null);
+    setDragStartX(null);
+    setDragStartY(null);
   };
 
   // Handle row click for track selection
@@ -172,7 +194,7 @@ export default function TrackHeaderList({ scrollRef, onScroll }: Props) {
               key={track.id}
               className={`${styles.row} ${isSelected ? styles.selected : ''} ${isActive ? styles.active : ''} ${dragOverTrackId === track.id ? styles.rowDropTarget : ''} ${draggedTrackId === track.id ? styles.rowDragging : ''}`}
               onClick={(e) => handleRowClick(e, track.id)}
-              draggable
+              draggable={rowDraggable}
               onDragStart={(e) => handleDragStart(e, track.id)}
               onDragOver={(e) => handleDragOverTrack(e, track.id)}
               onDragLeave={handleDragLeaveTrack}
@@ -250,6 +272,8 @@ export default function TrackHeaderList({ scrollRef, onScroll }: Props) {
                   step={0.01}
                   value={track.volume}
                   onChange={(e) => updateTrack(track.id, { volume: Number(e.target.value) })}
+                  onMouseDown={(e) => { e.stopPropagation(); setRowDraggable(false); }}
+                  onTouchStart={(e) => { e.stopPropagation(); setRowDraggable(false); }}
                   title={`Volume: ${Math.round(track.volume * 100)}%`}
                   className={styles.volume}
                   aria-label={`Volume for ${track.name}`}
@@ -262,6 +286,8 @@ export default function TrackHeaderList({ scrollRef, onScroll }: Props) {
                     step={0.01}
                     value={track.pan}
                     onChange={(e) => updateTrack(track.id, { pan: Number(e.target.value) })}
+                    onMouseDown={(e) => { e.stopPropagation(); setRowDraggable(false); }}
+                    onTouchStart={(e) => { e.stopPropagation(); setRowDraggable(false); }}
                     title={`Pan: ${formatPan(track.pan)}`}
                     className={styles.pan}
                     aria-label={`Pan for ${track.name}`}
