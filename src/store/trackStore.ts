@@ -10,6 +10,7 @@ interface TrackState {
   selectedClipIds: string[];
   undoStack: Track[][];
   redoStack: Track[][];
+  clipboard: Clip[];  // Added clipboard to TrackState
 
   // Track and Clip Management
   addTrack: (track: Omit<Track, 'id' | 'clips'>) => void;
@@ -65,12 +66,10 @@ const getSelectedClips = (tracks: Track[], selectedClipIds: string[]): { clip: C
 };
 
 // Helper to push state to undo stack
-const pushToUndoStack = (tracks: Track[]) => {
-  set((state) => ({
-    undoStack: [...state.undoStack, state.tracks],
-    redoStack: [],
-    tracks,
-  }));
+const pushToUndoStack = (state: TrackState, tracks: Track[]) => {
+  state.undoStack = [...state.undoStack, state.tracks];
+  state.redoStack = [];
+  state.tracks = tracks;
 };
 
 const useTrackStore = create<TrackState>((set) => ({
@@ -80,6 +79,7 @@ const useTrackStore = create<TrackState>((set) => ({
   selectedClipIds: [],
   undoStack: [],
   redoStack: [],
+  clipboard: [],
 
   // Track and Clip Management
   addTrack: (track) => {
@@ -344,7 +344,6 @@ const useTrackStore = create<TrackState>((set) => ({
       const selectedClips = getSelectedClips(state.tracks, state.selectedClipIds);
       if (selectedClips.length === 0) return state;
 
-      const clipboard = selectedClips.map(({ clip }) => clip);
       const newTracks = state.tracks.map((track) => ({
         ...track,
         clips: track.clips.filter((clip) => !state.selectedClipIds.includes(clip.id)),
@@ -352,7 +351,7 @@ const useTrackStore = create<TrackState>((set) => ({
 
       return {
         tracks: newTracks,
-        clipboard,
+        clipboard: selectedClips.map(({ clip }) => clip),
         selectedClipIds: [],
       };
     });
@@ -363,8 +362,9 @@ const useTrackStore = create<TrackState>((set) => ({
       const selectedClips = getSelectedClips(state.tracks, state.selectedClipIds);
       if (selectedClips.length === 0) return state;
 
-      const clipboard = selectedClips.map(({ clip }) => clip);
-      return { clipboard };
+      return {
+        clipboard: selectedClips.map(({ clip }) => clip),
+      };
     });
   },
 
@@ -508,7 +508,7 @@ const useTrackStore = create<TrackState>((set) => ({
       if (selectedClips.length === 0) return state;
       
       // Push current state to undo stack
-      pushToUndoStack(state.tracks);
+      const newUndoStack = [...state.undoStack, state.tracks];
       
       // Calculate batchStart and batchEnd
       const batchStart = Math.min(...selectedClips.map(({ clip }) => clip.startBeat));
@@ -546,6 +546,8 @@ const useTrackStore = create<TrackState>((set) => ({
       return {
         tracks: newTracks,
         selectedClipIds: newSelectedClipIds,
+        undoStack: newUndoStack,
+        redoStack: [],
       };
     });
   },
