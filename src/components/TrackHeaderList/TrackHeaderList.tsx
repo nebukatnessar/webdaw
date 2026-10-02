@@ -32,7 +32,8 @@ export default function TrackHeaderList({ scrollRef, onScroll }: Props) {
   const [dragOverTrackId, setDragOverTrackId] = useState<string | null>(null);
   const [dragStartX, setDragStartX] = useState<number | null>(null);
   const [dragStartY, setDragStartY] = useState<number | null>(null);
-  const DRAG_THRESHOLD = 5; // Pixels to distinguish intentional drags
+  const [rowDraggable, setRowDraggable] = useState(true);
+  const DRAG_THRESHOLD = 15; // Pixels to distinguish intentional drags
 
   // State for EffectsDialog
   const [openDialogTrackId, setOpenDialogTrackId] = useState<string | null>(null);
@@ -193,7 +194,7 @@ export default function TrackHeaderList({ scrollRef, onScroll }: Props) {
               key={track.id}
               className={`${styles.row} ${isSelected ? styles.selected : ''} ${isActive ? styles.active : ''} ${dragOverTrackId === track.id ? styles.rowDropTarget : ''} ${draggedTrackId === track.id ? styles.rowDragging : ''}`}
               onClick={(e) => handleRowClick(e, track.id)}
-              draggable
+              draggable={rowDraggable}
               onDragStart={(e) => handleDragStart(e, track.id)}
               onDragOver={(e) => handleDragOverTrack(e, track.id)}
               onDragLeave={handleDragLeaveTrack}
@@ -271,6 +272,8 @@ export default function TrackHeaderList({ scrollRef, onScroll }: Props) {
                   step={0.01}
                   value={track.volume}
                   onChange={(e) => updateTrack(track.id, { volume: Number(e.target.value) })}
+                  onMouseDown={(e) => { e.stopPropagation(); setRowDraggable(false); }}
+                  onTouchStart={(e) => { e.stopPropagation(); setRowDraggable(false); }}
                   title={`Volume: ${Math.round(track.volume * 100)}%`}
                   className={styles.volume}
                   aria-label={`Volume for ${track.name}`}
@@ -283,6 +286,8 @@ export default function TrackHeaderList({ scrollRef, onScroll }: Props) {
                     step={0.01}
                     value={track.pan}
                     onChange={(e) => updateTrack(track.id, { pan: Number(e.target.value) })}
+                    onMouseDown={(e) => { e.stopPropagation(); setRowDraggable(false); }}
+                    onTouchStart={(e) => { e.stopPropagation(); setRowDraggable(false); }}
                     title={`Pan: ${formatPan(track.pan)}`}
                     className={styles.pan}
                     aria-label={`Pan for ${track.name}`}
