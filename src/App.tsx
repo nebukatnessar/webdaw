@@ -8,6 +8,7 @@ import { useProjectStore } from './store/projectStore';
 import { useTrackStore } from './store/trackStore';
 import { useTransportStore } from './store/transportStore';
 import Toast from './components/Toast/Toast';
+import ProgressModal from './components/ProgressModal/ProgressModal';
 
 function App() {
   const headerRef = useRef<HTMLDivElement>(null);
@@ -165,6 +166,7 @@ function App() {
         <MasterFader />
       </div>
       {toast && <Toast message={toast.message} onClose={() => setToast(null)} key={toast.key} />}
+      <ProgressModal />
     </div>
   );
 }
