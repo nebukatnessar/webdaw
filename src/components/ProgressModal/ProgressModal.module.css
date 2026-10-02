@@ -1,0 +1,68 @@
+.overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  /* Above the project/export dialogs (z-index 1000) and the toast */
+  z-index: 1100;
+  backdrop-filter: blur(2px);
+}
+
+.modal {
+  background: var(--bg-1);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 28px 36px;
+  min-width: 280px;
+  max-width: 90vw;
+  text-align: center;
+  color: var(--text);
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+}
+
+.spinner {
+  width: 36px;
+  height: 36px;
+  margin: 0 auto 16px;
+  border: 3px solid var(--bg-3);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.message {
+  margin: 0 0 14px;
+  font-size: 1rem;
+  font-weight: 500;
+}
+
+.progressTrack {
+  height: 6px;
+  background: var(--bg-3);
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.progressBar {
+  height: 100%;
+  background: var(--accent);
+  border-radius: 3px;
+  transition: width 0.2s;
+}
+
+.detail {
+  margin: 8px 0 0;
+  font-size: 0.85rem;
+  color: var(--text-dim);
+}

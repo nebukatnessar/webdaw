@@ -24,6 +24,17 @@ import * as handleStore from '../utils/handleStore';
 import { useTrackStore as trackStore } from './trackStore';
 import { useTransportStore as transportStore } from './transportStore';
 
+// Progress shown by the modal indicator during project save/load (issue
+// #168). A `total` of 0 means the number of steps is not (yet) known and
+// the modal falls back to an indeterminate spinner.
+export interface ProjectProgress {
+  message: string;
+  // Audio files processed so far
+  current: number;
+  // Total audio files to process, or 0 when unknown
+  total: number;
+}
+
 interface ProjectState {
   // Current project
   currentProjectId: string | null;
@@ -43,6 +54,11 @@ interface ProjectState {
   // surfaced as a one-click "Reconnect" action instead of losing file-backed
   // audio silently.
   pendingReconnect: { handle: FileSystemDirectoryHandle | null; projectName: string } | null;
+
+  // Modal progress indicator for project save/load (issue #168): non-null
+  // while a save/load step is in flight; ProgressModal renders it so users
+  // can see the app is busy instead of assuming it failed.
+  progress: ProjectProgress | null;
 
   // Actions
   setCurrentProject: (id: string | null, name: string) => void;
@@ -85,6 +101,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
   fileStructure: null,
   lastUsedDirectory: null,
   pendingReconnect: null,
+  progress: null,
 
   setCurrentProject: (id, name) => {
     set({
@@ -300,10 +317,13 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
     if (state.fileStructure) {
       try {
         // Save to existing file system location
-        if (!state.fileStructure.folderHandle) {
+        const folderHandle = state.fileStructure.folderHandle;
+        if (!folderHandle) {
           throw new Error('No folder handle available for existing project');
         }
-        await saveProjectWithAudio(tracks, serialized, state.fileStructure.folderHandle);
+        await withModalProgress(`Saving "${projectName}"…`, (onProgress) =>
+          saveProjectWithAudio(tracks, serialized, folderHandle, onProgress),
+        );
 
         // Update metadata (preserve createdAt if project exists)
         const existingProjects = getProjectMetadataList();
@@ -342,7 +362,9 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
         const projectFolderHandle = await state.lastUsedDirectory.getDirectoryHandle(projectName, { create: true });
         
         // Save project to the project subfolder
-        const structure = await saveProjectWithAudio(tracks, serialized, projectFolderHandle);
+        const structure = await withModalProgress(`Saving "${projectName}"…`, (onProgress) =>
+          saveProjectWithAudio(tracks, serialized, projectFolderHandle, onProgress),
+        );
 
         // Update metadata (preserve createdAt if project exists)
         const existingProjects2 = getProjectMetadataList();
@@ -396,7 +418,9 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
       const projectFolderHandle = await baseDirHandle.getDirectoryHandle(projectName, { create: true });
       
       // Save project to the project subfolder (not the base directory directly)
-      const structure = await saveProjectWithAudio(tracks, serialized, projectFolderHandle);
+      const structure = await withModalProgress(`Saving "${projectName}"…`, (onProgress) =>
+        saveProjectWithAudio(tracks, serialized, projectFolderHandle, onProgress),
+      );
 
       // Update metadata (preserve createdAt if project exists)
       const existingProjects3 = getProjectMetadataList();
@@ -445,8 +469,12 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
     const serialized = await loadProjectFromFileSystem(folderHandle);
     const tracks = convertToTracks(serialized.tracks);
     
-    // Load audio files for all clips
-    await loadAllAudioFiles(folderHandle, tracks);
+    // Load audio files for all clips, with the modal progress indicator up
+    // while they are read and decoded - on bigger projects this is by far
+    // the slowest part of loading (issue #168)
+    await withModalProgress(`Loading "${serialized.name}"…`, (onProgress) =>
+      loadAllAudioFiles(folderHandle, tracks, onProgress),
+    );
     
     const now = Date.now();
     const projectName = serialized.name;
@@ -628,6 +656,25 @@ function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise
   ]);
 }
 
+// Runs a project save/load step with the global modal progress state up
+// (issue #168), so users can see that the app is busy instead of assuming
+// it failed. The step reports progress per audio file through onProgress;
+// the state is cleared again whether the step succeeds or throws, so the
+// modal can never get stuck over the app.
+async function withModalProgress<T>(
+  message: string,
+  step: (onProgress: (done: number, total: number) => void) => Promise<T>,
+): Promise<T> {
+  useProjectStore.setState({ progress: { message, current: 0, total: 0 } });
+  try {
+    return await step((done, total) =>
+      useProjectStore.setState({ progress: { message, current: done, total } }),
+    );
+  } finally {
+    useProjectStore.setState({ progress: null });
+  }
+}
+
 // Save the project's audio buffers (keyed by clip, not by the whole global
 // buffer map) and link each saved file back onto the serialized clip before
 // writing project.json, then write the project file.
@@ -635,6 +682,7 @@ async function saveProjectWithAudio(
   tracks: Track[],
   serialized: SerializedProject,
   folderHandle: FileSystemDirectoryHandle,
+  onProgress?: (done: number, total: number) => void,
 ): Promise<ProjectFileStructure> {
   const audioDirHandle = await folderHandle.getDirectoryHandle('audio', { create: true });
 
@@ -643,6 +691,18 @@ async function saveProjectWithAudio(
     for (const clip of track.clips) clipsById.set(clip.id, clip);
   }
 
+  // Count the clips that actually have a live audio buffer to write, so
+  // progress can be reported as a fraction of real file writes.
+  let totalToSave = 0;
+  for (const track of serialized.tracks) {
+    for (const clip of track.clips) {
+      const runtimeClip = clipsById.get(clip.id);
+      if (!runtimeClip?.audioBufferId) continue;
+      if (engine.getBuffer(runtimeClip.audioBufferId)) totalToSave += 1;
+    }
+  }
+
+  let saved = 0;
   for (const track of serialized.tracks) {
     for (const clip of track.clips) {
       const runtimeClip = clipsById.get(clip.id);
@@ -653,6 +713,9 @@ async function saveProjectWithAudio(
         clip.audioFile = await saveAudioToProject(audioDirHandle, buffer, clip.id, clip.name);
       } catch (e) {
         console.error(`Failed to save audio for clip ${clip.id}:`, e);
+      } finally {
+        saved += 1;
+        onProgress?.(saved, totalToSave);
       }
     }
   }
@@ -683,11 +746,22 @@ async function hydrateAudioFromCache(tracks: Track[]): Promise<void> {
 // Helper to load audio files for clips
 async function loadAllAudioFiles(
   folderHandle: FileSystemDirectoryHandle,
-  tracks: Track[]
+  tracks: Track[],
+  onProgress?: (done: number, total: number) => void,
 ): Promise<void> {
   try {
     const audioDirHandle = await folderHandle.getDirectoryHandle('audio');
     
+    // Count the audio files up front so progress can be reported as a
+    // fraction while they are read and decoded.
+    let totalToLoad = 0;
+    for (const track of tracks) {
+      for (const clip of track.clips) {
+        if (clip.audioFile) totalToLoad += 1;
+      }
+    }
+
+    let loaded = 0;
     for (const track of tracks) {
       for (const clip of track.clips) {
         if (clip.audioFile) {
@@ -699,6 +773,9 @@ async function loadAllAudioFiles(
           } catch (e) {
             console.warn(`Failed to load audio file ${clip.audioFile}:`, e);
             clip.audioBufferId = undefined;
+          } finally {
+            loaded += 1;
+            onProgress?.(loaded, totalToLoad);
           }
         }
       }
