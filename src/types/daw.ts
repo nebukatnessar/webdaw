@@ -9,6 +9,7 @@ export interface Clip {
   audioFile?: string | null; // File path for saved projects
   bufferOffsetBeats?: number; // Beats into the source AudioBuffer where this clip's window begins. 0/undefined = play from buffer start.
   clipGain?: number; // Linear amplitude multiplier applied to this clip (1 = unity). Stored linear; UI converts from dB via 10^(dB/20).
+  muted?: boolean; // Add this property. Default: false.
 }
 
 
@@ -46,7 +47,9 @@ export interface EQSettings {
   highQ: number;     // Quality factor for high band (0.1 to 5)
 }
 
+
 export type ReverbRoomType = 'Room' | 'Hall' | 'Cathedral';
+
 
 export interface ReverbSettings {
   enabled: boolean;
