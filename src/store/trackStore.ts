@@ -55,6 +55,9 @@ export interface TrackState {
   adjustSelectedClipGain: (deltaDb: number) => void;
   resetSelectedClipGain: () => void;
   endClipGainSession: () => void;
+  setClipFadeIn: (clipId: string, durationBeats: number) => void;
+  setClipFadeOut: (clipId: string, durationBeats: number) => void;
+  setClipFadeType: (clipId: string, fadeType: 'linear' | 'exponential') => void;
 
   // New functions for multi-track controls
   toggleArmSelected: () => void;
@@ -777,6 +780,62 @@ export const useTrackStore = create<TrackState>((set) => ({
 
   endClipGainSession: () => {
     set((state) => (state.clipGainSessionActive ? { clipGainSessionActive: false } : state));
+  },
+
+  setClipFadeIn: (clipId, durationBeats) => {
+    set((state) => {
+      if (!Number.isFinite(durationBeats) || durationBeats < 0) return state;
+      let didChange = false;
+      const tracks = state.tracks.map((track) => ({
+        ...track,
+        clips: track.clips.map((clip) => {
+          if (clip.id !== clipId) return clip;
+          // A fade can never be longer than the clip itself (e.g. after a trim)
+          const clamped = Math.min(durationBeats, clip.durationBeats);
+          if ((clip.fadeInDuration ?? 0) === clamped) return clip;
+          didChange = true;
+          return { ...clip, fadeInDuration: clamped };
+        }),
+      }));
+      if (!didChange) return state;
+      return { tracks, undoStack: [...state.undoStack, state.tracks], redoStack: [] };
+    });
+  },
+
+  setClipFadeOut: (clipId, durationBeats) => {
+    set((state) => {
+      if (!Number.isFinite(durationBeats) || durationBeats < 0) return state;
+      let didChange = false;
+      const tracks = state.tracks.map((track) => ({
+        ...track,
+        clips: track.clips.map((clip) => {
+          if (clip.id !== clipId) return clip;
+          const clamped = Math.min(durationBeats, clip.durationBeats);
+          if ((clip.fadeOutDuration ?? 0) === clamped) return clip;
+          didChange = true;
+          return { ...clip, fadeOutDuration: clamped };
+        }),
+      }));
+      if (!didChange) return state;
+      return { tracks, undoStack: [...state.undoStack, state.tracks], redoStack: [] };
+    });
+  },
+
+  setClipFadeType: (clipId, fadeType) => {
+    set((state) => {
+      let didChange = false;
+      const tracks = state.tracks.map((track) => ({
+        ...track,
+        clips: track.clips.map((clip) => {
+          if (clip.id !== clipId) return clip;
+          if ((clip.fadeType ?? 'linear') === fadeType) return clip;
+          didChange = true;
+          return { ...clip, fadeType };
+        }),
+      }));
+      if (!didChange) return state;
+      return { tracks, undoStack: [...state.undoStack, state.tracks], redoStack: [] };
+    });
   },
 
   // New functions for multi-track controls

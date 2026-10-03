@@ -10,6 +10,9 @@ export interface Clip {
   bufferOffsetBeats?: number; // Beats into the source AudioBuffer where this clip's window begins. 0/undefined = play from buffer start.
   clipGain?: number; // Linear amplitude multiplier applied to this clip (1 = unity). Stored linear; UI converts from dB via 10^(dB/20).
   muted?: boolean; // Add this property. Default: false.
+  fadeInDuration?: number; // Fade-in length in beats (0 or undefined = no fade)
+  fadeOutDuration?: number; // Fade-out length in beats (0 or undefined = no fade)
+  fadeType?: 'linear' | 'exponential'; // Fade curve shape (default: 'linear')
 }
 
 

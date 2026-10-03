@@ -82,6 +82,29 @@
   pointer-events: none;
 }
 
+/* Fade drag handles: ride the end of the fade line (the clip's top corner
+   when no fade is set) and own the top band of the clip, so the top corners
+   always adjust fades while the edges below adjust trim. Height matches the
+   clip label row. */
+.fadeHandle {
+  position: absolute;
+  top: 0;
+  width: 14px;
+  height: 20px;
+  background: transparent;
+  cursor: ew-resize;
+  z-index: 15;
+  opacity: 0;
+  transform: translateX(-50%);
+  transition: opacity 0.15s ease;
+}
+
+.clip:hover .fadeHandle,
+.fadeVisible {
+  opacity: 1;
+  background: rgba(255, 255, 255, 0.25);
+}
+
 .trimHandleL {
   left: 0;
 }

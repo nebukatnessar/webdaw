@@ -29,13 +29,22 @@ import {
   cleanupDelayNode,
   getDefaultDelaySettings,
 } from './delay';
+import { scheduleClipGainEnvelope } from './clip';
 
 let audioCtx: AudioContext | null = null;
 const bufferMap = new Map<string, AudioBuffer>();
 const activeSources: AudioBufferSourceNode[] = [];
 // Per-clip gain nodes for sources currently scheduled, keyed by clip id, so
-// clip mute (and clip gain) changes apply live to already-playing sources.
-const activeClipGainNodes = new Map<string, Set<GainNode>>();
+// clip mute, clip gain, and fade changes apply live to already-playing
+// sources by rebuilding the remaining gain envelope.
+interface ActiveClipSource {
+  node: GainNode;
+  startCtxTime: number;
+  endCtxTime: number;
+  bpm: number;
+  startPosSecs: number; // clip-local position where this window starts
+}
+const activeClipGainNodes = new Map<string, ActiveClipSource[]>();
 
 // Single persistent master gain node that every track routes through
 // before reaching the speakers, so there's one final volume stage for the
@@ -272,25 +281,36 @@ export function updateLiveTrackParams(tracks: Track[]): void {
 }
 
 /**
- * Applies clip-level mute (and clip gain) to sources that are already
- * playing, so toggling M on selected clips takes effect live - the same
- * way track mute/solo does - without re-scheduling anything.
+ * Re-applies clip-level mute, gain, and fades to sources that are already
+ * playing (or scheduled), so toggling M or dragging a fade during playback
+ * takes effect live - the same way track mute/solo does - without
+ * re-scheduling anything. The envelope from now on is rebuilt, so an
+ * ongoing fade continues smoothly from its current value.
  */
-function applyLiveClipMute(tracks: Track[]): void {
+function applyLiveClipGain(tracks: Track[]): void {
   if (activeClipGainNodes.size === 0) return;
+  const ctx = getAudioContext();
   for (const track of tracks) {
     for (const clip of track.clips) {
-      const nodes = activeClipGainNodes.get(clip.id);
-      if (!nodes) continue;
-      const gain = clip.muted ? 0 : (clip.clipGain ?? 1);
-      for (const node of nodes) node.gain.value = gain;
+      const sources = activeClipGainNodes.get(clip.id);
+      if (!sources) continue;
+      for (const source of sources) {
+        const now = ctx.currentTime;
+        if (now >= source.endCtxTime) continue;
+        source.node.gain.cancelScheduledValues(now);
+        if (now < source.startCtxTime) {
+          scheduleClipGainEnvelope(source.node.gain, clip, source.startCtxTime, source.endCtxTime, source.bpm, source.startPosSecs);
+        } else {
+          scheduleClipGainEnvelope(source.node.gain, clip, now, source.endCtxTime, source.bpm, source.startPosSecs + (now - source.startCtxTime));
+        }
+      }
     }
   }
 }
 
 useTrackStore.subscribe((state: TrackState) => {
   updateLiveTrackParams(state.tracks);
-  applyLiveClipMute(state.tracks);
+  applyLiveClipGain(state.tracks);
 });
 
 // Track the last-applied master effect settings so the insert chain is only
@@ -391,30 +411,30 @@ export function schedulePlayback(
 
       const source = ctx.createBufferSource();
       source.buffer = buffer;
-      // Per-clip gain stage: source -> clipGainNode -> gainNode, so clip gain
-      // multiplies before track gain and unity-gain clips behave exactly as
-      // before. Created per scheduled source, so it dies with the source.
+      // Per-clip gain stage: source -> clipGainNode -> gainNode, so clip
+      // gain, mute, and fades all multiply before track gain. The envelope
+      // (fades) is scheduled on the node; the node dies with the source.
       const clipGainNode = ctx.createGain();
-      clipGainNode.gain.value = clip.muted ? 0 : (clip.clipGain ?? 1);
+      const endCtxTime = when + duration;
+      const startPosSecs = Math.max(0, playheadSecs - clipStartSecs);
+      scheduleClipGainEnvelope(clipGainNode.gain, clip, when, endCtxTime, bpm, startPosSecs);
       source.connect(clipGainNode);
       clipGainNode.connect(gainNode);
       source.start(when, offset, duration);
 
-      let clipNodes = activeClipGainNodes.get(clip.id);
-      if (!clipNodes) {
-        clipNodes = new Set();
-        activeClipGainNodes.set(clip.id, clipNodes);
-      }
-      clipNodes.add(clipGainNode);
+      const clipSources = activeClipGainNodes.get(clip.id) ?? [];
+      clipSources.push({ node: clipGainNode, startCtxTime: when, endCtxTime, bpm, startPosSecs });
+      activeClipGainNodes.set(clip.id, clipSources);
 
       activeSources.push(source);
       source.onended = () => {
         const idx = activeSources.indexOf(source);
         if (idx !== -1) activeSources.splice(idx, 1);
-        const nodes = activeClipGainNodes.get(clip.id);
-        if (nodes) {
-          nodes.delete(clipGainNode);
-          if (nodes.size === 0) activeClipGainNodes.delete(clip.id);
+        const sources = activeClipGainNodes.get(clip.id);
+        if (sources) {
+          const nodeIdx = sources.findIndex((entry) => entry.node === clipGainNode);
+          if (nodeIdx !== -1) sources.splice(nodeIdx, 1);
+          if (sources.length === 0) activeClipGainNodes.delete(clip.id);
         }
       };
     }

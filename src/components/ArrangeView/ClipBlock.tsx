@@ -21,11 +21,19 @@ export default function ClipBlock({ clip }: Props) {
   const pixelsPerBeat = usePixelsPerBeat();
   const bpm = useTransportStore((s) => s.bpm);
   const trimClip = useTrackStore((s) => s.trimClip);
+  const setClipFadeIn = useTrackStore((s) => s.setClipFadeIn);
+  const setClipFadeOut = useTrackStore((s) => s.setClipFadeOut);
   const selectClip = useTrackStore((s) => s.selectClip);
   const selectedClipIds = useTrackStore((s) => s.selectedClipIds);
   
   // State for trimming
   const [isTrimming, setIsTrimming] = useState(false);
+
+  // State for fade-handle drags (mirrors the trim flow: local values while
+  // dragging, committed to the store once on pointer up)
+  const [isFading, setIsFading] = useState(false);
+  const [isFadingIn, setIsFadingIn] = useState(false);
+  const [fadeDragValue, setFadeDragValue] = useState(0);
   const [isTrimmingLeft, setIsTrimmingLeft] = useState(false);
   const [isTrimmingRight, setIsTrimmingRight] = useState(false);
   const [trimStartBeat, setTrimStartBeat] = useState(clip.startBeat);
@@ -37,6 +45,10 @@ export default function ClipBlock({ clip }: Props) {
   
   // Ref to track if the current interaction is a drag (exceeded threshold)
   const isDraggingRef = useRef(false);
+
+  // Ref for the fade drag: the clip's on-screen position, so the pointer
+  // maps directly onto the fade length instead of accumulating deltas
+  const fadeDragRef = useRef<{ leftPx: number; widthPx: number } | null>(null);
 
   const isSelected = selectedClipIds.includes(clip.id);
 
@@ -107,6 +119,48 @@ export default function ClipBlock({ clip }: Props) {
     
     e.stopPropagation();
   };
+
+  // Handle pointer down on a fade handle (fade-in left, fade-out right).
+  // The handle rides the end of the fade line, so the drag positions the
+  // fade tip directly under the pointer.
+  const handleFadeStart = (e: React.PointerEvent<HTMLDivElement>, edge: 'in' | 'out') => {
+    e.stopPropagation();
+    e.preventDefault();
+    const clipElement = e.currentTarget.parentElement;
+    if (!clipElement) return;
+    const rect = clipElement.getBoundingClientRect();
+    fadeDragRef.current = { leftPx: rect.left, widthPx: rect.width };
+    (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+    setIsFadingIn(edge === 'in');
+    setFadeDragValue(edge === 'in' ? (clip.fadeInDuration ?? 0) : (clip.fadeOutDuration ?? 0));
+    setIsFading(true);
+  };
+
+  const handleFadeMove = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (!isFading || !fadeDragRef.current) return;
+    const xPx = e.clientX - fadeDragRef.current.leftPx;
+    const raw = isFadingIn
+      ? xPx / pixelsPerBeat
+      : (fadeDragRef.current.widthPx - xPx) / pixelsPerBeat;
+    setFadeDragValue(Math.max(0, Math.min(raw, clip.durationBeats)));
+  };
+
+  const handleFadeEnd = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (!isFading) return;
+    (e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId);
+    const value = Math.round(fadeDragValue * 1000) / 1000;
+    const original = isFadingIn ? (clip.fadeInDuration ?? 0) : (clip.fadeOutDuration ?? 0);
+    if (value !== original) {
+      if (isFadingIn) setClipFadeIn(clip.id, value);
+      else setClipFadeOut(clip.id, value);
+    }
+    fadeDragRef.current = null;
+    setIsFading(false);
+  };
+
+  // Effective fade values (the dragged value during a fade drag)
+  const effectiveFadeIn = isFading && isFadingIn ? fadeDragValue : (clip.fadeInDuration ?? 0);
+  const effectiveFadeOut = isFading && !isFadingIn ? fadeDragValue : (clip.fadeOutDuration ?? 0);
 
   // Get the audio buffer for this clip to compute buffer duration
   function getBufferDurationBeats(): number {
@@ -263,6 +317,12 @@ export default function ClipBlock({ clip }: Props) {
   const effectiveDurationBeats = isTrimming ? trimDurationBeats : clip.durationBeats;
   const effectiveWidth = Math.max(1, Math.round(effectiveDurationBeats * pixelsPerBeat));
 
+  // Fade handle positions: each handle rides the end of its fade line, so
+  // once a fade is set its tip becomes the pickup point (the clip corner
+  // when no fade is set).
+  const fadeInPx = effectiveDurationBeats > 0 ? (effectiveFadeIn / effectiveDurationBeats) * effectiveWidth : 0;
+  const fadeOutPx = effectiveDurationBeats > 0 ? (effectiveFadeOut / effectiveDurationBeats) * effectiveWidth : 0;
+
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas || !clip.audioBufferId) return;
@@ -275,17 +335,19 @@ export default function ClipBlock({ clip }: Props) {
       startBeat: effectiveStartBeat,
       bufferOffsetBeats: effectiveBufferOffsetBeats,
       durationBeats: effectiveDurationBeats,
+      fadeInDuration: effectiveFadeIn,
+      fadeOutDuration: effectiveFadeOut,
     };
     
     drawWaveform(canvas, buffer, effectiveClip, bpm);
-  }, [clip.audioBufferId, clip.clipGain, effectiveWidth, effectiveBufferOffsetBeats, effectiveDurationBeats, bpm, isTrimming]);
+  }, [clip.audioBufferId, clip.clipGain, effectiveFadeIn, effectiveFadeOut, effectiveWidth, effectiveBufferOffsetBeats, effectiveDurationBeats, bpm, isTrimming]);
 
   return (
     <div
       className={`${styles.clip} ${isSelected ? styles.selected : ''} ${clip.muted ? styles.muted : ''}`} data-clip
       style={{ left: effectiveStartBeat * pixelsPerBeat, width: effectiveWidth, background: clip.color }}
-      draggable={!isTrimming}
-      onDragStart={isTrimming ? undefined : handleDragStart}
+      draggable={!isTrimming && !isFading}
+      onDragStart={isTrimming || isFading ? undefined : handleDragStart}
       onPointerDown={handlePointerDown}
       onPointerMove={isTrimming ? handleTrimMove : handlePointerMove}
       onPointerUp={isTrimming ? handleTrimEnd : handlePointerUp}
@@ -301,6 +363,24 @@ export default function ClipBlock({ clip }: Props) {
       <div
         className={styles.trimHandleR}
         onPointerDown={handleTrimStartRight}
+      />
+      
+      {/* Fade handles: ride the end of each fade (the corner when unset) */}
+      <div
+        className={`${styles.fadeHandle} ${effectiveFadeIn > 0 ? styles.fadeVisible : ''}`}
+        style={{ left: fadeInPx }}
+        onPointerDown={(e) => handleFadeStart(e, 'in')}
+        onPointerMove={handleFadeMove}
+        onPointerUp={handleFadeEnd}
+        title="Fade in"
+      />
+      <div
+        className={`${styles.fadeHandle} ${effectiveFadeOut > 0 ? styles.fadeVisible : ''}`}
+        style={{ left: effectiveWidth - fadeOutPx }}
+        onPointerDown={(e) => handleFadeStart(e, 'out')}
+        onPointerMove={handleFadeMove}
+        onPointerUp={handleFadeEnd}
+        title="Fade out"
       />
       
       <span className={styles.name}>{clip.name}</span>
@@ -353,5 +433,39 @@ function drawWaveform(canvas: HTMLCanvasElement, buffer: AudioBuffer, clip: Clip
     const yTop = mid * (1 - maxVal * gain);
     const yBot = mid * (1 - minVal * gain);
     ctx.fillRect(x, yTop, 1, Math.max(1, yBot - yTop));
+  }
+
+  // Fade overlays: shaded triangle plus a diagonal line from the clip edge,
+  // matching what the audio envelope does at playback.
+  const fadeInBeats = Math.min(clip.fadeInDuration ?? 0, clip.durationBeats);
+  const fadeOutBeats = Math.min(clip.fadeOutDuration ?? 0, clip.durationBeats);
+  ctx.lineWidth = 1;
+  ctx.strokeStyle = 'rgba(255, 255, 255, 0.85)';
+  ctx.fillStyle = 'rgba(0, 0, 0, 0.3)';
+  if (fadeInBeats > 0 && clip.durationBeats > 0) {
+    const fadeWidth = (fadeInBeats / clip.durationBeats) * width;
+    ctx.beginPath();
+    ctx.moveTo(0, height);
+    ctx.lineTo(fadeWidth, 0);
+    ctx.lineTo(0, 0);
+    ctx.closePath();
+    ctx.fill();
+    ctx.beginPath();
+    ctx.moveTo(0, height);
+    ctx.lineTo(fadeWidth, 0);
+    ctx.stroke();
+  }
+  if (fadeOutBeats > 0 && clip.durationBeats > 0) {
+    const fadeWidth = (fadeOutBeats / clip.durationBeats) * width;
+    ctx.beginPath();
+    ctx.moveTo(width, height);
+    ctx.lineTo(width - fadeWidth, 0);
+    ctx.lineTo(width, 0);
+    ctx.closePath();
+    ctx.fill();
+    ctx.beginPath();
+    ctx.moveTo(width, height);
+    ctx.lineTo(width - fadeWidth, 0);
+    ctx.stroke();
   }
 }
