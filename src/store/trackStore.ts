@@ -62,6 +62,9 @@ export interface TrackState {
   toggleSoloSelected: () => void;
   deleteSelectedTracks: () => void;
   duplicateSelected: () => void;
+  
+  // Clip-level mute function
+  toggleMuteSelectedClips: () => void;
 
   // Reorder tracks by moving a track from one index to another
   reorderTrack: (fromIndex: number, toIndex: number) => void;
@@ -761,6 +764,26 @@ export const useTrackStore = create<TrackState>((set) => ({
             : t
         ),
       };
+    });
+  },
+
+  toggleMuteSelectedClips: () => {
+    set((state) => {
+      const selectedClipIds = new Set(state.selectedClipIds);
+      if (selectedClipIds.size === 0) return state;
+
+      let didToggle = false;
+      const tracks = state.tracks.map((track) => ({
+        ...track,
+        clips: track.clips.map((clip) => {
+          if (!selectedClipIds.has(clip.id)) return clip;
+          didToggle = true;
+          return { ...clip, muted: !clip.muted };
+        }),
+      }));
+
+      if (!didToggle) return state;
+      return { tracks };
     });
   },
 
