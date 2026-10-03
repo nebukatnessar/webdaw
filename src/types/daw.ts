@@ -12,7 +12,8 @@ export interface Clip {
   muted?: boolean; // Add this property. Default: false.
   fadeInDuration?: number; // Fade-in length in beats (0 or undefined = no fade)
   fadeOutDuration?: number; // Fade-out length in beats (0 or undefined = no fade)
-  fadeType?: FadeType; // Fade curve shape (default: 'exponential'; double-click a fade handle to cycle shapes)
+  fadeInType?: FadeType; // Fade-in curve shape (default: 'exponential'; double-click the fade-in handle to cycle shapes)
+  fadeOutType?: FadeType; // Fade-out curve shape (default: 'exponential'; double-click the fade-out handle to cycle shapes)
 }
 
 // Fade curve shapes. 'exponential' swells in quickly and releases with an

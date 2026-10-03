@@ -57,8 +57,9 @@ export default function ClipBlock({ clip }: Props) {
   // Gain badge value in dB relative to unity; hidden when at 0 dB
   const clipGainDb = Math.round(20 * Math.log10(clip.clipGain ?? 1));
 
-  // Active fade curve shape (shown in the fade handle tooltips)
-  const fadeCurve: FadeType = clip.fadeType ?? 'exponential';
+  // Active fade curve shapes (shown in the fade handle tooltips)
+  const fadeInCurve: FadeType = clip.fadeInType ?? 'exponential';
+  const fadeOutCurve: FadeType = clip.fadeOutType ?? 'exponential';
 
   const handleDragStart = (e: React.DragEvent<HTMLDivElement>) => {
     // Record where within the clip the user grabbed (in beats) so the drop
@@ -167,14 +168,14 @@ export default function ClipBlock({ clip }: Props) {
   const effectiveFadeIn = isFading && isFadingIn ? fadeDragValue : (clip.fadeInDuration ?? 0);
   const effectiveFadeOut = isFading && !isFadingIn ? fadeDragValue : (clip.fadeOutDuration ?? 0);
 
-  // Double-clicking a fade handle cycles the clip's fade curve shape:
+  // Double-clicking a fade handle cycles that edge's fade curve shape:
   // exponential (default) -> logarithmic (mirrored) -> linear.
-  const handleFadeTypeCycle = (e: React.MouseEvent) => {
+  const handleFadeTypeCycle = (e: React.MouseEvent, edge: 'in' | 'out') => {
     e.stopPropagation();
     const order: FadeType[] = ['exponential', 'logarithmic', 'linear'];
-    const current = clip.fadeType ?? 'exponential';
+    const current = edge === 'in' ? fadeInCurve : fadeOutCurve;
     const next = order[(order.indexOf(current) + 1) % order.length] ?? 'exponential';
-    setClipFadeType(clip.id, next);
+    setClipFadeType(clip.id, edge, next);
   };
 
   // Get the audio buffer for this clip to compute buffer duration
@@ -355,7 +356,7 @@ export default function ClipBlock({ clip }: Props) {
     };
     
     drawWaveform(canvas, buffer, effectiveClip, bpm);
-  }, [clip.audioBufferId, clip.clipGain, clip.fadeType, effectiveFadeIn, effectiveFadeOut, effectiveWidth, effectiveBufferOffsetBeats, effectiveDurationBeats, bpm, isTrimming]);
+  }, [clip.audioBufferId, clip.clipGain, clip.fadeInType, clip.fadeOutType, effectiveFadeIn, effectiveFadeOut, effectiveWidth, effectiveBufferOffsetBeats, effectiveDurationBeats, bpm, isTrimming]);
 
   return (
     <div
@@ -387,8 +388,8 @@ export default function ClipBlock({ clip }: Props) {
         onPointerDown={(e) => handleFadeStart(e, 'in')}
         onPointerMove={handleFadeMove}
         onPointerUp={handleFadeEnd}
-        onDoubleClick={handleFadeTypeCycle}
-        title={`Fade in (${fadeCurve}) - double-click to change shape`}
+        onDoubleClick={(e) => handleFadeTypeCycle(e, 'in')}
+        title={`Fade in (${fadeInCurve}) - double-click to change shape`}
       />
       <div
         className={`${styles.fadeHandle} ${effectiveFadeOut > 0 ? styles.fadeVisible : ''}`}
@@ -396,8 +397,8 @@ export default function ClipBlock({ clip }: Props) {
         onPointerDown={(e) => handleFadeStart(e, 'out')}
         onPointerMove={handleFadeMove}
         onPointerUp={handleFadeEnd}
-        onDoubleClick={handleFadeTypeCycle}
-        title={`Fade out (${fadeCurve}) - double-click to change shape`}
+        onDoubleClick={(e) => handleFadeTypeCycle(e, 'out')}
+        title={`Fade out (${fadeOutCurve}) - double-click to change shape`}
       />
       
       <span className={styles.name}>{clip.name}</span>
@@ -456,7 +457,8 @@ function drawWaveform(canvas: HTMLCanvasElement, buffer: AudioBuffer, clip: Clip
   // line itself, drawn with the same shape the audio envelope plays.
   const fadeInBeats = Math.min(clip.fadeInDuration ?? 0, clip.durationBeats);
   const fadeOutBeats = Math.min(clip.fadeOutDuration ?? 0, clip.durationBeats);
-  const fadeCurve: FadeType = clip.fadeType ?? 'exponential';
+  const fadeInCurve: FadeType = clip.fadeInType ?? 'exponential';
+  const fadeOutCurve: FadeType = clip.fadeOutType ?? 'exponential';
   ctx.lineWidth = 1;
   ctx.strokeStyle = 'rgba(255, 255, 255, 0.85)';
   ctx.fillStyle = 'rgba(0, 0, 0, 0.3)';
@@ -464,7 +466,7 @@ function drawWaveform(canvas: HTMLCanvasElement, buffer: AudioBuffer, clip: Clip
     const fadeWidth = Math.max(1, (fadeInBeats / clip.durationBeats) * width);
     const points: [number, number][] = [];
     for (let x = 0; x <= fadeWidth; x++) {
-      const v = fadeCurveValueAt(fadeCurve, 'in', x / fadeWidth);
+      const v = fadeCurveValueAt(fadeInCurve, 'in', x / fadeWidth);
       points.push([x, height * (1 - v)]);
     }
     ctx.beginPath();
@@ -482,7 +484,7 @@ function drawWaveform(canvas: HTMLCanvasElement, buffer: AudioBuffer, clip: Clip
     const fadeWidth = Math.max(1, (fadeOutBeats / clip.durationBeats) * width);
     const points: [number, number][] = [];
     for (let i = 0; i <= fadeWidth; i++) {
-      const v = fadeCurveValueAt(fadeCurve, 'out', i / fadeWidth);
+      const v = fadeCurveValueAt(fadeOutCurve, 'out', i / fadeWidth);
       points.push([width - fadeWidth + i, height * (1 - v)]);
     }
     ctx.beginPath();

@@ -57,7 +57,7 @@ export interface TrackState {
   endClipGainSession: () => void;
   setClipFadeIn: (clipId: string, durationBeats: number) => void;
   setClipFadeOut: (clipId: string, durationBeats: number) => void;
-  setClipFadeType: (clipId: string, fadeType: FadeType) => void;
+  setClipFadeType: (clipId: string, edge: 'in' | 'out', fadeType: FadeType) => void;
 
   // New functions for multi-track controls
   toggleArmSelected: () => void;
@@ -821,16 +821,21 @@ export const useTrackStore = create<TrackState>((set) => ({
     });
   },
 
-  setClipFadeType: (clipId, fadeType) => {
+  setClipFadeType: (clipId, edge, fadeType) => {
     set((state) => {
       let didChange = false;
       const tracks = state.tracks.map((track) => ({
         ...track,
         clips: track.clips.map((clip) => {
           if (clip.id !== clipId) return clip;
-          if ((clip.fadeType ?? 'exponential') === fadeType) return clip;
+          const current = edge === 'in'
+            ? (clip.fadeInType ?? 'exponential')
+            : (clip.fadeOutType ?? 'exponential');
+          if (current === fadeType) return clip;
           didChange = true;
-          return { ...clip, fadeType };
+          return edge === 'in'
+            ? { ...clip, fadeInType: fadeType }
+            : { ...clip, fadeOutType: fadeType };
         }),
       }));
       if (!didChange) return state;

@@ -14,8 +14,8 @@ const CURVE_STEEPNESS = Math.pow(10, -60 / 20); // 0.001
 const FADE_CURVE_STEPS = 16;
 
 /**
- * Coerces an unknown fadeType (e.g. from a saved project) to a valid shape,
- * defaulting to the exponential curve.
+ * Coerces an unknown fade curve name (e.g. from a saved project) to a valid
+ * shape, defaulting to the exponential curve.
  */
 export function normalizeFadeType(value: unknown): FadeType {
   return value === 'linear' || value === 'logarithmic' ? value : 'exponential';
@@ -26,15 +26,16 @@ export interface ClipGainEnvelope {
   muted: boolean;
   fadeInSecs: number; // already clamped to the clip length
   fadeOutSecs: number;
-  curve: FadeType;
+  inCurve: FadeType;
+  outCurve: FadeType;
 }
 
 /**
  * Derives the per-clip gain envelope (mute, clip gain, fade-in/out) for a
  * clip at the given BPM. Fade durations live on the clip in beats and are
  * converted to seconds here, clamped to the clip's own duration so a fade
- * can never exceed the clip (e.g. after a trim or a split). Fades default
- * to the exponential curve when no type is set.
+ * can never exceed the clip (e.g. after a trim or a split). Each fade edge
+ * has its own curve shape, defaulting to exponential when unset.
  */
 export function clipGainEnvelope(clip: Clip, bpm: number): ClipGainEnvelope {
   const beatsToSecs = 60 / bpm;
@@ -44,7 +45,8 @@ export function clipGainEnvelope(clip: Clip, bpm: number): ClipGainEnvelope {
     muted: clip.muted ?? false,
     fadeInSecs: Math.min(Math.max(0, clip.fadeInDuration ?? 0) * beatsToSecs, totalSecs),
     fadeOutSecs: Math.min(Math.max(0, clip.fadeOutDuration ?? 0) * beatsToSecs, totalSecs),
-    curve: normalizeFadeType(clip.fadeType),
+    inCurve: normalizeFadeType(clip.fadeInType),
+    outCurve: normalizeFadeType(clip.fadeOutType),
   };
 }
 
@@ -81,11 +83,11 @@ export function clipEnvelopeValueAt(
   if (env.muted) return 0;
   const pos = Math.max(0, Math.min(positionSecs, totalSecs));
   if (env.fadeInSecs > 0 && pos < env.fadeInSecs) {
-    return env.peak * fadeCurveValueAt(env.curve, 'in', pos / env.fadeInSecs);
+    return env.peak * fadeCurveValueAt(env.inCurve, 'in', pos / env.fadeInSecs);
   }
   const fadeOutStart = totalSecs - env.fadeOutSecs;
   if (env.fadeOutSecs > 0 && pos > fadeOutStart) {
-    return env.peak * fadeCurveValueAt(env.curve, 'out', (pos - fadeOutStart) / env.fadeOutSecs);
+    return env.peak * fadeCurveValueAt(env.outCurve, 'out', (pos - fadeOutStart) / env.fadeOutSecs);
   }
   return env.peak;
 }
@@ -96,7 +98,8 @@ export function clipEnvelopeValueAt(
 // rebuild mid-fade continues the same curve.
 function scheduleFadeSegments(
   param: AudioParam,
-  env: ClipGainEnvelope,
+  curve: FadeType,
+  peak: number,
   phase: 'in' | 'out',
   fromProgress: number,
   toProgress: number,
@@ -105,9 +108,9 @@ function scheduleFadeSegments(
 ): void {
   if (toProgress <= fromProgress || endCtxTime <= startCtxTime) return;
   const span = toProgress - fromProgress;
-  if (env.curve === 'linear') {
+  if (curve === 'linear') {
     param.linearRampToValueAtTime(
-      env.peak * fadeCurveValueAt('linear', phase, toProgress),
+      peak * fadeCurveValueAt('linear', phase, toProgress),
       endCtxTime,
     );
     return;
@@ -116,7 +119,7 @@ function scheduleFadeSegments(
   for (let i = 1; i <= FADE_CURVE_STEPS; i++) {
     const p = fromProgress + span * (i / FADE_CURVE_STEPS);
     param.linearRampToValueAtTime(
-      env.peak * fadeCurveValueAt(env.curve, phase, p),
+      peak * fadeCurveValueAt(curve, phase, p),
       startCtxTime + duration * (i / FADE_CURVE_STEPS),
     );
   }
@@ -158,7 +161,7 @@ export function scheduleClipGainEnvelope(
     const fromProgress = positionSecs / env.fadeInSecs;
     const toProgress = Math.min(1, windowEndSecs / env.fadeInSecs);
     scheduleFadeSegments(
-      param, env, 'in', fromProgress, toProgress,
+      param, env.inCurve, env.peak, 'in', fromProgress, toProgress,
       startCtxTime,
       toProgress === 1 ? toCtxTime(env.fadeInSecs) : endCtxTime,
     );
@@ -175,7 +178,7 @@ export function scheduleClipGainEnvelope(
     const fromProgress = Math.max(0, (positionSecs - fadeOutStartSecs) / env.fadeOutSecs);
     const toProgress = Math.min(1, (windowEndSecs - fadeOutStartSecs) / env.fadeOutSecs);
     scheduleFadeSegments(
-      param, env, 'out', fromProgress, toProgress,
+      param, env.outCurve, env.peak, 'out', fromProgress, toProgress,
       Math.max(startCtxTime, toCtxTime(fadeOutStartSecs)),
       toProgress === 1 ? toCtxTime(totalSecs) : endCtxTime,
     );

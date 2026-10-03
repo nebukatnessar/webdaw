@@ -61,7 +61,9 @@ export interface SerializedClip {
   muted?: boolean; // Clip-level mute; absent in older projects (unmuted)
   fadeInDuration?: number; // Fade-in length in beats
   fadeOutDuration?: number; // Fade-out length in beats
-  fadeType?: string; // 'linear' | 'exponential'
+  fadeInType?: string; // 'linear' | 'exponential' | 'logarithmic'
+  fadeOutType?: string; // 'linear' | 'exponential' | 'logarithmic'
+  fadeType?: string; // Legacy pre-split shape; applied to both edges on load
   audioFile: string | null; // Relative path to audio file, e.g., "audio/clip1.wav"
   // Session-scoped id into the in-memory audio buffer cache. Only meaningful
   // for the localStorage auto-save round-trip (restoring across a refresh
