@@ -143,10 +143,37 @@ function App() {
         const gridBeats = useTransportStore.getState().gridDivisionBeats;
         useTrackStore.getState().quantizeSelected(gridBeats);
       }
+
+      // Handle per-clip gain with +/- (incl. Shift+=) and 0 (reset), acting
+      // on all selected clips in 1 dB steps
+      if ((e.key === '+' || e.key === '=') && !e.ctrlKey && !e.metaKey && !e.altKey) {
+        e.preventDefault();
+        useTrackStore.getState().adjustSelectedClipGain(1);
+      }
+
+      if (e.key === '-' && !e.ctrlKey && !e.metaKey && !e.altKey) {
+        e.preventDefault();
+        useTrackStore.getState().adjustSelectedClipGain(-1);
+      }
+
+      if (e.key === '0' && !e.ctrlKey && !e.metaKey && !e.altKey) {
+        e.preventDefault();
+        useTrackStore.getState().resetSelectedClipGain();
+      }
+    };
+
+    // A consecutive +/-/0 gain-adjustment burst shares one undo snapshot;
+    // releasing the key ends the session so the next burst gets a new one.
+    const handleKeyUp = () => {
+      useTrackStore.getState().endClipGainSession();
     };
 
     window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
+    window.addEventListener('keyup', handleKeyUp);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener('keyup', handleKeyUp);
+    };
   }, []);
 
   return (

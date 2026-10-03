@@ -121,6 +121,7 @@ export function createProjectFromState(
         name: clip.name,
         color: clip.color,
         bufferOffsetBeats: clip.bufferOffsetBeats ?? 0,
+        clipGain: clip.clipGain ?? 1,
         audioFile: clip.audioFile ?? null,
         audioBufferId: clip.audioBufferId,
       })),
@@ -154,6 +155,7 @@ export function convertToTracks(serializedTracks: SerializedTrack[]): Track[] {
       name: clip.name,
       color: clip.color,
       bufferOffsetBeats: clip.bufferOffsetBeats ?? 0,
+      clipGain: clip.clipGain ?? 1,
       // Carried through for the localStorage auto-save round-trip; loading
       // from a real project folder overwrites this via loadAllAudioFiles.
       audioBufferId: clip.audioBufferId,

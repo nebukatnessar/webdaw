@@ -40,6 +40,9 @@ export default function ClipBlock({ clip }: Props) {
 
   const isSelected = selectedClipIds.includes(clip.id);
 
+  // Gain badge value in dB relative to unity; hidden when at 0 dB
+  const clipGainDb = Math.round(20 * Math.log10(clip.clipGain ?? 1));
+
   const handleDragStart = (e: React.DragEvent<HTMLDivElement>) => {
     // Record where within the clip the user grabbed (in beats) so the drop
     // position can be offset correctly.
@@ -275,7 +278,7 @@ export default function ClipBlock({ clip }: Props) {
     };
     
     drawWaveform(canvas, buffer, effectiveClip, bpm);
-  }, [clip.audioBufferId, effectiveWidth, effectiveBufferOffsetBeats, effectiveDurationBeats, bpm, isTrimming]);
+  }, [clip.audioBufferId, clip.clipGain, effectiveWidth, effectiveBufferOffsetBeats, effectiveDurationBeats, bpm, isTrimming]);
 
   return (
     <div
@@ -302,6 +305,11 @@ export default function ClipBlock({ clip }: Props) {
       
       <span className={styles.name}>{clip.name}</span>
       <canvas ref={canvasRef} className={styles.canvas} width={effectiveWidth} height={40} />
+      {clip.clipGain !== undefined && clipGainDb !== 0 && (
+        <span className={styles.gainBadge}>
+          {clipGainDb > 0 ? '+' + clipGainDb + 'dB' : clipGainDb + 'dB'}
+        </span>
+      )}
     </div>
   );
 }
@@ -327,6 +335,9 @@ function drawWaveform(canvas: HTMLCanvasElement, buffer: AudioBuffer, clip: Clip
   ctx.fillStyle = 'rgba(255, 255, 255, 0.6)';
 
   const mid = height / 2;
+  // Scale the drawn amplitude by the clip's gain so louder clips read louder;
+  // the canvas clips anything scaled past its bounds.
+  const gain = clip.clipGain ?? 1;
   for (let x = 0; x < width; x++) {
     // Map canvas x position to sample range
     const samplePosStart = sampleStart + Math.floor((x / width) * clipSampleLength);
@@ -339,8 +350,8 @@ function drawWaveform(canvas: HTMLCanvasElement, buffer: AudioBuffer, clip: Clip
       if (v > maxVal) maxVal = v;
       if (v < minVal) minVal = v;
     }
-    const yTop = mid * (1 - maxVal);
-    const yBot = mid * (1 - minVal);
+    const yTop = mid * (1 - maxVal * gain);
+    const yBot = mid * (1 - minVal * gain);
     ctx.fillRect(x, yTop, 1, Math.max(1, yBot - yTop));
   }
 }

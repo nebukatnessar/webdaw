@@ -57,6 +57,7 @@ export interface SerializedClip {
   name: string;
   color: string;
   bufferOffsetBeats: number;
+  clipGain?: number; // Linear amplitude multiplier (1 = unity); absent in older projects
   audioFile: string | null; // Relative path to audio file, e.g., "audio/clip1.wav"
   // Session-scoped id into the in-memory audio buffer cache. Only meaningful
   // for the localStorage auto-save round-trip (restoring across a refresh

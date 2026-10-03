@@ -11,6 +11,7 @@ export interface TrackState {
   undoStack: Track[][];
   redoStack: Track[][];
   clipboard: Clip[];  // Added clipboard to TrackState
+  clipGainSessionActive: boolean;  // True between the first +/-/0 gain keypress and the keyup that ends the burst
 
   // Track and Clip Management
   addTrack: (track: Omit<Track, 'id' | 'clips'>) => void;
@@ -51,6 +52,9 @@ export interface TrackState {
   deleteSelectedClips: () => void;
   undo: () => void;
   redo: () => void;
+  adjustSelectedClipGain: (deltaDb: number) => void;
+  resetSelectedClipGain: () => void;
+  endClipGainSession: () => void;
 
   // New functions for multi-track controls
   toggleArmSelected: () => void;
@@ -62,6 +66,14 @@ export interface TrackState {
   // Reorder tracks by moving a track from one index to another
   reorderTrack: (fromIndex: number, toIndex: number) => void;
 }
+
+// Clip gain adjustment bounds (issue #147). Values live on each clip as linear
+// amplitude multipliers; the +/-/0 shortcuts work in dB and convert here.
+const MIN_CLIP_GAIN_DB = -30;
+const MAX_CLIP_GAIN_DB = 12;
+const clipGainToDb = (clipGain: number | undefined): number =>
+  Math.round(20 * Math.log10(clipGain ?? 1) * 10) / 10;
+const dbToClipGain = (db: number): number => Math.pow(10, db / 20);
 
 // Helper function to get selected clips
 const getSelectedClips = (tracks: Track[], selectedClipIds: string[]): { clip: Clip; trackId: string }[] => {
@@ -84,6 +96,7 @@ export const useTrackStore = create<TrackState>((set) => ({
   undoStack: [],
   redoStack: [],
   clipboard: [],
+  clipGainSessionActive: false,
 
   // Track and Clip Management
   addTrack: (track) => {
@@ -614,6 +627,7 @@ export const useTrackStore = create<TrackState>((set) => ({
         tracks: previousState,
         undoStack: state.undoStack.slice(0, -1),
         redoStack: [...state.redoStack, state.tracks],
+        clipGainSessionActive: false,
       };
     });
   },
@@ -627,8 +641,69 @@ export const useTrackStore = create<TrackState>((set) => ({
         tracks: nextState,
         undoStack: [...state.undoStack, state.tracks],
         redoStack: state.redoStack.slice(0, -1),
+        clipGainSessionActive: false,
       };
     });
+  },
+
+  adjustSelectedClipGain: (deltaDb) => {
+    set((state) => {
+      const selected = new Set(state.selectedClipIds);
+      if (selected.size === 0) return state;
+
+      let didAdjust = false;
+      const tracks = state.tracks.map((track) => ({
+        ...track,
+        clips: track.clips.map((clip) => {
+          if (!selected.has(clip.id)) return clip;
+          const nextDb = Math.round((clipGainToDb(clip.clipGain) + deltaDb) * 10) / 10;
+          // At the bounds the adjustment no-ops for that clip
+          if (nextDb > MAX_CLIP_GAIN_DB || nextDb < MIN_CLIP_GAIN_DB) return clip;
+          didAdjust = true;
+          return { ...clip, clipGain: dbToClipGain(nextDb) };
+        }),
+      }));
+
+      if (!didAdjust) return state;
+      // One undo snapshot per consecutive adjustment session, pushed on the
+      // first keypress; later keypresses in the same burst only move gains.
+      return {
+        tracks,
+        undoStack: state.clipGainSessionActive ? state.undoStack : [...state.undoStack, state.tracks],
+        redoStack: state.clipGainSessionActive ? state.redoStack : [],
+        clipGainSessionActive: true,
+      };
+    });
+  },
+
+  resetSelectedClipGain: () => {
+    set((state) => {
+      const selected = new Set(state.selectedClipIds);
+      if (selected.size === 0) return state;
+
+      let didReset = false;
+      const tracks = state.tracks.map((track) => ({
+        ...track,
+        clips: track.clips.map((clip) => {
+          if (!selected.has(clip.id)) return clip;
+          if ((clip.clipGain ?? 1) === 1) return clip;
+          didReset = true;
+          return { ...clip, clipGain: 1 };
+        }),
+      }));
+
+      if (!didReset) return state;
+      return {
+        tracks,
+        undoStack: state.clipGainSessionActive ? state.undoStack : [...state.undoStack, state.tracks],
+        redoStack: state.clipGainSessionActive ? state.redoStack : [],
+        clipGainSessionActive: true,
+      };
+    });
+  },
+
+  endClipGainSession: () => {
+    set((state) => (state.clipGainSessionActive ? { clipGainSessionActive: false } : state));
   },
 
   // New functions for multi-track controls

@@ -62,6 +62,20 @@
   background: rgba(255, 255, 255, 0.2);
 }
 
+.gainBadge {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  z-index: 5;
+  font-size: 10px;
+  font-family: 'Courier New', monospace;
+  color: var(--text);
+  background: rgba(0, 0, 0, 0.45);
+  border-radius: 3px;
+  padding: 1px 3px;
+  pointer-events: none;
+}
+
 .trimHandleL {
   left: 0;
 }

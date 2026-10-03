@@ -368,7 +368,13 @@ export function schedulePlayback(
 
       const source = ctx.createBufferSource();
       source.buffer = buffer;
-      source.connect(gainNode);
+      // Per-clip gain stage: source -> clipGainNode -> gainNode, so clip gain
+      // multiplies before track gain and unity-gain clips behave exactly as
+      // before. Created per scheduled source, so it dies with the source.
+      const clipGainNode = ctx.createGain();
+      clipGainNode.gain.value = clip.clipGain ?? 1;
+      source.connect(clipGainNode);
+      clipGainNode.connect(gainNode);
       source.start(when, offset, duration);
 
       activeSources.push(source);
