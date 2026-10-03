@@ -9,6 +9,7 @@ import useTrackStore from './store/trackStore';
 import { useTransportStore } from './store/transportStore';
 import Toast from './components/Toast/Toast';
 import ProgressModal from './components/ProgressModal/ProgressModal';
+import { handleKeyDown } from './keyboard/keyboardShortcuts';
 
 function App() {
   const headerRef = useRef<HTMLDivElement>(null);
@@ -67,7 +68,7 @@ function App() {
 
   // Keyboard handler for split (S), undo split (Ctrl/Cmd+Z), and clip operations
   useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
+    const handleKeyDownApp = (e: KeyboardEvent) => {
       // Skip if typing in form fields
       const target = e.target as HTMLElement | null;
       if (target?.closest('input, textarea, select, [contenteditable]')) {
@@ -168,10 +169,13 @@ function App() {
       useTrackStore.getState().endClipGainSession();
     };
 
+    // Add event listener for keyboard shortcuts from keyboardShortcuts.ts
     window.addEventListener('keydown', handleKeyDown);
+    window.addEventListener('keydown', handleKeyDownApp);
     window.addEventListener('keyup', handleKeyUp);
     return () => {
       window.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener('keydown', handleKeyDownApp);
       window.removeEventListener('keyup', handleKeyUp);
     };
   }, []);
