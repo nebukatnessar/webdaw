@@ -1,6 +1,6 @@
 import { decodeFile } from '../audio/engine';
 import { encodeWav } from '../audio/wav';
-import type { Track } from '../types/daw';
+import type { MasterEffects, Track } from '../types/daw';
 import type {
   SerializedProject,
   SerializedTrack,
@@ -81,6 +81,7 @@ export function createProjectFromState(
     selectionStart: number | null;
     selectionEnd: number | null;
     masterVolume: number;
+    masterEffects?: MasterEffects;
   },
   name: string = 'Untitled Project'
 ): SerializedProject {
@@ -97,6 +98,7 @@ export function createProjectFromState(
       selectionStart: transportState.selectionStart,
       selectionEnd: transportState.selectionEnd,
       masterVolume: transportState.masterVolume,
+      masterEffects: transportState.masterEffects ?? {},
     },
     tracks: tracks.map((track) => ({
       id: track.id,

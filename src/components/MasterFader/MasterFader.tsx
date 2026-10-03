@@ -1,14 +1,19 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import styles from './MasterFader.module.css';
 import { useTransportStore } from '../../store/transportStore';
 import * as engine from '../../audio/engine';
 import { levelToPercent } from '../../audio/meterUtils';
 import VuMeterBar from '../VuMeterBar/VuMeterBar';
+import EffectsDialog from '../EffectsDialog/EffectsDialog';
 
 export default function MasterFader() {
   const masterVolume = useTransportStore((s) => s.masterVolume);
   const setMasterVolume = useTransportStore((s) => s.setMasterVolume);
   const isPlaying = useTransportStore((s) => s.isPlaying);
+
+  const [isFxDialogOpen, setIsFxDialogOpen] = useState(false);
+  const [fxDialogPosition, setFxDialogPosition] = useState({ x: 100, y: 100 });
+  const [fxDialogSize, setFxDialogSize] = useState({ width: 500, height: 400 });
 
   const leftMaskRef = useRef<HTMLDivElement>(null);
   const rightMaskRef = useRef<HTMLDivElement>(null);
@@ -46,6 +51,12 @@ export default function MasterFader() {
     };
   }, [isPlaying]);
 
+  // Open the master effects dialog just left of the master strip.
+  const openFxDialog = () => {
+    setFxDialogPosition({ x: Math.max(16, window.innerWidth - 520), y: 120 });
+    setIsFxDialogOpen(true);
+  };
+
   return (
     <div className={styles.wrapper}>
       <span className={styles.label}>Master</span>
@@ -67,6 +78,26 @@ export default function MasterFader() {
         <VuMeterBar ref={rightMaskRef} title="Right channel level" />
       </div>
       <span className={styles.value}>{Math.round(masterVolume * 100)}%</span>
+      <button
+        type="button"
+        className={styles.fxButton}
+        onClick={openFxDialog}
+        aria-label="Master effects"
+        title="Master effects"
+      >
+        FX
+      </button>
+      {isFxDialogOpen && (
+        <EffectsDialog
+          target={{ kind: 'master' }}
+          trackName="Master"
+          onClose={() => setIsFxDialogOpen(false)}
+          position={fxDialogPosition}
+          onPositionChange={(x, y) => setFxDialogPosition({ x, y })}
+          size={fxDialogSize}
+          onSizeChange={(width, height) => setFxDialogSize({ width, height })}
+        />
+      )}
     </div>
   );
 }

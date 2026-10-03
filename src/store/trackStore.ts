@@ -492,6 +492,15 @@ export const useTrackStore = create<TrackState>((set) => ({
       return {
         tracks: state.tracks.map((track) => {
           if (track.id === sourceTrack.id) {
+            if (track.id === newTrackId) {
+              // Same track: update the clip in place instead of remove-then-add
+              return {
+                ...track,
+                clips: track.clips.map((c) =>
+                  c.id === clipId ? { ...c, startBeat: newStartBeat } : c
+                ),
+              };
+            }
             return {
               ...track,
               clips: track.clips.filter((c) => c.id !== clipId),

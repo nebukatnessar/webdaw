@@ -1,3 +1,5 @@
+import type { MasterEffects } from './daw';
+
 // Project metadata stored in localStorage for the load dialog
 export interface ProjectMetadata {
   id: string;
@@ -17,6 +19,8 @@ export interface ProjectTransportState {
   selectionStart: number | null;
   selectionEnd: number | null;
   masterVolume: number;
+  // Master insert effect settings; absent in older projects (all bypassed)
+  masterEffects?: MasterEffects;
 }
 
 // Full project state that gets saved to project.json

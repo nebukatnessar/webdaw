@@ -1,11 +1,13 @@
 import { useState, useEffect } from 'react';
-import type { ReverbSettings, ReverbRoomType } from '../../types/daw';
+import type { EffectsTarget, ReverbSettings, ReverbRoomType } from '../../types/daw';
 
 import { useTrackStore } from '../../store/trackStore';
+import { useTransportStore } from '../../store/transportStore';
 import { getDefaultReverbSettings } from '../../audio/reverb';
 
 interface ReverbControlsProps {
-  trackId: string;
+  trackId?: string;
+  target?: EffectsTarget;
 }
 
 const ROOM_TYPES: ReverbRoomType[] = ['Room', 'Hall', 'Cathedral'];
@@ -20,37 +22,54 @@ const REVERB_PARAMS = {
   damping: { min: 0, max: 1, step: 0.01, label: 'Damping' },
 } as const;
 
-export default function ReverbControls({ trackId }: ReverbControlsProps) {
+export default function ReverbControls({ trackId, target }: ReverbControlsProps) {
+  const resolvedTarget: EffectsTarget = target ?? { kind: 'track', trackId: trackId ?? '' };
+  const targetTrackId = resolvedTarget.kind === 'track' ? resolvedTarget.trackId : null;
+  const isMaster = resolvedTarget.kind === 'master';
   const updateTrack = useTrackStore((state) => state.updateTrack);
-  const track = useTrackStore((state) => state.tracks.find((t) => t.id === trackId));
+  const track = useTrackStore((state) =>
+    targetTrackId !== null ? state.tracks.find((t) => t.id === targetTrackId) : undefined
+  );
+  const setMasterEffect = useTransportStore((state) => state.setMasterEffect);
+  const masterReverb = useTransportStore((state) => (isMaster ? state.masterEffects.reverb : undefined));
+
+  const storedSettings = isMaster ? masterReverb : track?.reverb;
 
   const [settings, setSettings] = useState<ReverbSettings>(
-    track?.reverb || getDefaultReverbSettings()
+    storedSettings || getDefaultReverbSettings()
   );
 
-  // Sync with store when track changes
+  // Sync with store when settings change
   useEffect(() => {
-    if (track?.reverb) {
-      setSettings(track.reverb);
+    if (storedSettings) {
+      setSettings(storedSettings);
     }
-  }, [track?.reverb]);
+  }, [storedSettings]);
+
+  const writeSettings = (newSettings: ReverbSettings) => {
+    if (targetTrackId !== null) {
+      updateTrack(targetTrackId, { reverb: newSettings });
+    } else {
+      setMasterEffect('reverb', newSettings);
+    }
+  };
 
   const handleChange = (param: NumericReverbKey, value: number) => {
     const newSettings = { ...settings, [param]: value };
     setSettings(newSettings);
-    updateTrack(trackId, { reverb: newSettings });
+    writeSettings(newSettings);
   };
 
   const handleRoomTypeChange = (roomType: ReverbRoomType) => {
     const newSettings = { ...settings, roomType };
     setSettings(newSettings);
-    updateTrack(trackId, { reverb: newSettings });
+    writeSettings(newSettings);
   };
 
   const handleEnabledChange = (enabled: boolean) => {
     const newSettings = { ...settings, enabled };
     setSettings(newSettings);
-    updateTrack(trackId, { reverb: newSettings });
+    writeSettings(newSettings);
   };
 
   return (

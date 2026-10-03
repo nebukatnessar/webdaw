@@ -248,6 +248,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
             selectionStart: autoSaveSerialized.transport.selectionStart,
             selectionEnd: autoSaveSerialized.transport.selectionEnd,
             masterVolume: autoSaveSerialized.transport.masterVolume,
+            masterEffects: autoSaveSerialized.transport.masterEffects,
           });
           set({
             currentProjectId: `restored-${Date.now()}`,

@@ -1,11 +1,13 @@
 import { useState, useEffect } from 'react';
-import type { DelaySettings } from '../../types/daw';
+import type { EffectsTarget, DelaySettings } from '../../types/daw';
 
 import { useTrackStore } from '../../store/trackStore';
+import { useTransportStore } from '../../store/transportStore';
 import { getDefaultDelaySettings } from '../../audio/delay';
 
 interface DelayControlsProps {
-  trackId: string;
+  trackId?: string;
+  target?: EffectsTarget;
 }
 
 type NumericDelayKey = Exclude<keyof DelaySettings, 'enabled'>;
@@ -17,31 +19,48 @@ const DELAY_PARAMS = {
   dry: { min: 0, max: 1, step: 0.01, label: 'Dry' },
 } as const;
 
-export default function DelayControls({ trackId }: DelayControlsProps) {
+export default function DelayControls({ trackId, target }: DelayControlsProps) {
+  const resolvedTarget: EffectsTarget = target ?? { kind: 'track', trackId: trackId ?? '' };
+  const targetTrackId = resolvedTarget.kind === 'track' ? resolvedTarget.trackId : null;
+  const isMaster = resolvedTarget.kind === 'master';
   const updateTrack = useTrackStore((state) => state.updateTrack);
-  const track = useTrackStore((state) => state.tracks.find((t) => t.id === trackId));
+  const track = useTrackStore((state) =>
+    targetTrackId !== null ? state.tracks.find((t) => t.id === targetTrackId) : undefined
+  );
+  const setMasterEffect = useTransportStore((state) => state.setMasterEffect);
+  const masterDelay = useTransportStore((state) => (isMaster ? state.masterEffects.delay : undefined));
+
+  const storedSettings = isMaster ? masterDelay : track?.delay;
 
   const [settings, setSettings] = useState<DelaySettings>(
-    track?.delay || getDefaultDelaySettings()
+    storedSettings || getDefaultDelaySettings()
   );
 
-  // Sync with store when track changes
+  // Sync with store when settings change
   useEffect(() => {
-    if (track?.delay) {
-      setSettings(track.delay);
+    if (storedSettings) {
+      setSettings(storedSettings);
     }
-  }, [track?.delay]);
+  }, [storedSettings]);
+
+  const writeSettings = (newSettings: DelaySettings) => {
+    if (targetTrackId !== null) {
+      updateTrack(targetTrackId, { delay: newSettings });
+    } else {
+      setMasterEffect('delay', newSettings);
+    }
+  };
 
   const handleChange = (param: NumericDelayKey, value: number) => {
     const newSettings = { ...settings, [param]: value };
     setSettings(newSettings);
-    updateTrack(trackId, { delay: newSettings });
+    writeSettings(newSettings);
   };
 
   const handleEnabledChange = (enabled: boolean) => {
     const newSettings = { ...settings, enabled };
     setSettings(newSettings);
-    updateTrack(trackId, { delay: newSettings });
+    writeSettings(newSettings);
   };
 
   return (

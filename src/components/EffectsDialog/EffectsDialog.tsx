@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
+import type { EffectsTarget } from '../../types/daw';
 import styles from './EffectsDialog.module.css';
 import CompressorControls from './CompressorControls';
 import GateControls from './GateControls';
@@ -7,8 +8,9 @@ import ReverbControls from './ReverbControls';
 import DelayControls from './DelayControls';
 
 interface EffectsDialogProps {
-  trackId: string;
+  trackId?: string;
   trackName: string;
+  target?: EffectsTarget;
   onClose: () => void;
   position: { x: number; y: number };
   onPositionChange: (x: number, y: number) => void;
@@ -26,6 +28,7 @@ type EffectType = 'Gate' | 'Equalizer' | 'Compressor' | 'Delay' | 'Reverb';
 export default function EffectsDialog({
   trackId,
   trackName,
+  target,
   onClose,
   position,
   onPositionChange,
@@ -38,6 +41,10 @@ export default function EffectsDialog({
   const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
   const [resizeStart, setResizeStart] = useState({ width: 0, height: 0, x: 0, y: 0 });
   const [selectedEffect, setSelectedEffect] = useState<EffectType | null>('Compressor');
+
+  // Bind the dialog (and its control panels) to a track's effect rack or to
+  // the master chain. Track callers keep passing trackId only.
+  const resolvedTarget: EffectsTarget = target ?? { kind: 'track', trackId: trackId ?? '' };
 
   // Handle dragging
   const handleMouseDown = (e: React.MouseEvent) => {
@@ -134,11 +141,11 @@ export default function EffectsDialog({
           </ul>
         </div>
         <div className={styles.rightPane}>
-          {selectedEffect === 'Compressor' && <CompressorControls trackId={trackId} />}
-          {selectedEffect === 'Gate' && <GateControls trackId={trackId} />}
-          {selectedEffect === 'Equalizer' && <EQControls trackId={trackId} />}
-          {selectedEffect === 'Delay' && <DelayControls trackId={trackId} />}
-          {selectedEffect === 'Reverb' && <ReverbControls trackId={trackId} />}
+          {selectedEffect === 'Compressor' && <CompressorControls target={resolvedTarget} />}
+          {selectedEffect === 'Gate' && <GateControls target={resolvedTarget} />}
+          {selectedEffect === 'Equalizer' && <EQControls target={resolvedTarget} />}
+          {selectedEffect === 'Delay' && <DelayControls target={resolvedTarget} />}
+          {selectedEffect === 'Reverb' && <ReverbControls target={resolvedTarget} />}
         </div>
       </div>
       <div className={styles.resizeHandle} onMouseDown={handleResizeMouseDown} />

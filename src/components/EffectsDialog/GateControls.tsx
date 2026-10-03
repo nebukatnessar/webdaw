@@ -1,10 +1,12 @@
 import { useState, useEffect } from 'react';
-import type { GateSettings } from '../../types/daw';
+import type { EffectsTarget, GateSettings } from '../../types/daw';
 import { useTrackStore } from '../../store/trackStore';
+import { useTransportStore } from '../../store/transportStore';
 import { getDefaultGateSettings } from '../../audio/gate';
 
 interface GateControlsProps {
-  trackId: string;
+  trackId?: string;
+  target?: EffectsTarget;
 }
 
 type NumericGateKey = Exclude<keyof GateSettings, 'enabled'>;
@@ -17,31 +19,48 @@ const GATE_PARAMS = {
   range: { min: -60, max: 0, step: 1, label: 'Range (dB)' },
 } as const;
 
-export default function GateControls({ trackId }: GateControlsProps) {
+export default function GateControls({ trackId, target }: GateControlsProps) {
+  const resolvedTarget: EffectsTarget = target ?? { kind: 'track', trackId: trackId ?? '' };
+  const targetTrackId = resolvedTarget.kind === 'track' ? resolvedTarget.trackId : null;
+  const isMaster = resolvedTarget.kind === 'master';
   const updateTrack = useTrackStore((state) => state.updateTrack);
-  const track = useTrackStore((state) => state.tracks.find((t) => t.id === trackId));
+  const track = useTrackStore((state) =>
+    targetTrackId !== null ? state.tracks.find((t) => t.id === targetTrackId) : undefined
+  );
+  const setMasterEffect = useTransportStore((state) => state.setMasterEffect);
+  const masterGate = useTransportStore((state) => (isMaster ? state.masterEffects.gate : undefined));
+
+  const storedSettings = isMaster ? masterGate : track?.gate;
 
   const [settings, setSettings] = useState<GateSettings>(
-    track?.gate || getDefaultGateSettings()
+    storedSettings || getDefaultGateSettings()
   );
 
-  // Sync with store when track changes
+  // Sync with store when settings change
   useEffect(() => {
-    if (track?.gate) {
-      setSettings(track.gate);
+    if (storedSettings) {
+      setSettings(storedSettings);
     }
-  }, [track?.gate]);
+  }, [storedSettings]);
+
+  const writeSettings = (newSettings: GateSettings) => {
+    if (targetTrackId !== null) {
+      updateTrack(targetTrackId, { gate: newSettings });
+    } else {
+      setMasterEffect('gate', newSettings);
+    }
+  };
 
   const handleChange = (param: NumericGateKey, value: number) => {
     const newSettings = { ...settings, [param]: value };
     setSettings(newSettings);
-    updateTrack(trackId, { gate: newSettings });
+    writeSettings(newSettings);
   };
 
   const handleEnabledChange = (enabled: boolean) => {
     const newSettings = { ...settings, enabled };
     setSettings(newSettings);
-    updateTrack(trackId, { gate: newSettings });
+    writeSettings(newSettings);
   };
 
   return (

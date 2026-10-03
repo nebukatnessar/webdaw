@@ -1,11 +1,13 @@
 import { useState, useEffect } from 'react';
-import type { EQSettings } from '../../types/daw';
+import type { EffectsTarget, EQSettings } from '../../types/daw';
 
 import { useTrackStore } from '../../store/trackStore';
+import { useTransportStore } from '../../store/transportStore';
 import { getDefaultEQSettings } from '../../audio/eq';
 
 interface EQControlsProps {
-  trackId: string;
+  trackId?: string;
+  target?: EffectsTarget;
 }
 
 type NumericEQKey = Exclude<keyof EQSettings, 'enabled'>;
@@ -22,31 +24,48 @@ const EQ_PARAMS = {
   highQ: { min: 0.1, max: 5, step: 0.1, label: 'High Q' },
 } as const;
 
-export default function EQControls({ trackId }: EQControlsProps) {
+export default function EQControls({ trackId, target }: EQControlsProps) {
+  const resolvedTarget: EffectsTarget = target ?? { kind: 'track', trackId: trackId ?? '' };
+  const targetTrackId = resolvedTarget.kind === 'track' ? resolvedTarget.trackId : null;
+  const isMaster = resolvedTarget.kind === 'master';
   const updateTrack = useTrackStore((state) => state.updateTrack);
-  const track = useTrackStore((state) => state.tracks.find((t) => t.id === trackId));
+  const track = useTrackStore((state) =>
+    targetTrackId !== null ? state.tracks.find((t) => t.id === targetTrackId) : undefined
+  );
+  const setMasterEffect = useTransportStore((state) => state.setMasterEffect);
+  const masterEQ = useTransportStore((state) => (isMaster ? state.masterEffects.eq : undefined));
+
+  const storedSettings = isMaster ? masterEQ : track?.eq;
 
   const [settings, setSettings] = useState<EQSettings>(
-    track?.eq || getDefaultEQSettings()
+    storedSettings || getDefaultEQSettings()
   );
 
-  // Sync with store when track changes
+  // Sync with store when settings change
   useEffect(() => {
-    if (track?.eq) {
-      setSettings(track.eq);
+    if (storedSettings) {
+      setSettings(storedSettings);
     }
-  }, [track?.eq]);
+  }, [storedSettings]);
+
+  const writeSettings = (newSettings: EQSettings) => {
+    if (targetTrackId !== null) {
+      updateTrack(targetTrackId, { eq: newSettings });
+    } else {
+      setMasterEffect('eq', newSettings);
+    }
+  };
 
   const handleChange = (param: NumericEQKey, value: number) => {
     const newSettings = { ...settings, [param]: value };
     setSettings(newSettings);
-    updateTrack(trackId, { eq: newSettings });
+    writeSettings(newSettings);
   };
 
   const handleEnabledChange = (enabled: boolean) => {
     const newSettings = { ...settings, enabled };
     setSettings(newSettings);
-    updateTrack(trackId, { eq: newSettings });
+    writeSettings(newSettings);
   };
 
   return (

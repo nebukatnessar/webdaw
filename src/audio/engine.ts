@@ -1,7 +1,8 @@
-import type { Track } from '../types/daw';
+import type { Track, MasterEffects } from '../types/daw';
 import { cacheBuffer } from './bufferCache';
 import useTrackStore from '../store/trackStore';
 import type { TrackState } from '../store/trackStore';
+import { useTransportStore } from '../store/transportStore';
 import { rmsFromAnalyser } from './meterUtils';
 import {
   getOrCreateCompressorNode,
@@ -40,6 +41,10 @@ const activeSources: AudioBufferSourceNode[] = [];
 let masterGainNode: GainNode | null = null;
 let masterAnalyserL: AnalyserNode | null = null;
 let masterAnalyserR: AnalyserNode | null = null;
+// Splitter tapping the master signal for the L/R VU meters. applyMasterEffects
+// reconnects it to the end of the master insert chain so the meters reflect
+// the post-insert signal that actually reaches the speakers.
+let masterSplitterNode: ChannelSplitterNode | null = null;
 
 function getMasterGainNode(ctx: AudioContext): GainNode {
   if (!masterGainNode) {
@@ -50,6 +55,7 @@ function getMasterGainNode(ctx: AudioContext): GainNode {
     // per-channel analysers. This runs alongside the destination
     // connection, not in place of it.
     const splitter = ctx.createChannelSplitter(2);
+    masterSplitterNode = splitter;
     masterAnalyserL = ctx.createAnalyser();
     masterAnalyserR = ctx.createAnalyser();
     masterAnalyserL.fftSize = 512;
@@ -63,6 +69,65 @@ function getMasterGainNode(ctx: AudioContext): GainNode {
 
 export function setMasterVolume(volume: number): void {
   getMasterGainNode(getAudioContext()).gain.value = volume;
+}
+
+// Key under which the master chain's effect nodes are stored in the shared
+// per-id effect node maps. Track ids are timestamps, so this never collides
+// with a real track (and the cleanup loop in updateLiveTrackParams only
+// touches ids present in the trackNodes map, leaving these alone).
+const MASTER_FX_NODE_KEY = '__master__';
+
+/**
+ * Rebuilds the master insert chain live: masterGain -> [gate -> eq ->
+ * compressor -> delay -> reverb] -> destination, skipping unset/bypassed
+ * effects - the same construction pattern as the per-track chain in
+ * updateLiveTrackParams. The master gain node is never recreated; only its
+ * connections are rewired, so ongoing playback is not interrupted. The VU
+ * meter splitter is re-tapped at the end of the chain so the meters show
+ * the post-insert signal.
+ */
+export function applyMasterEffects(masterEffects: MasterEffects): void {
+  const ctx = getAudioContext();
+  const master = getMasterGainNode(ctx);
+  if (!masterSplitterNode) return;
+
+  master.disconnect();
+
+  // Same order as the per-track chain: dynamics -> EQ -> time-based effects.
+  let currentNode: AudioNode = master;
+
+  if (masterEffects.gate?.enabled) {
+    const gate = getOrCreateGateNode(ctx, MASTER_FX_NODE_KEY, masterEffects.gate);
+    currentNode.connect(gate.input);
+    currentNode = gate.output;
+  }
+
+  if (masterEffects.eq?.enabled) {
+    const eq = getOrCreateEQNode(ctx, MASTER_FX_NODE_KEY, masterEffects.eq);
+    currentNode.connect(eq.input);
+    currentNode = eq.output;
+  }
+
+  if (masterEffects.compressor?.enabled) {
+    const compressor = getOrCreateCompressorNode(ctx, MASTER_FX_NODE_KEY, masterEffects.compressor);
+    currentNode.connect(compressor.input);
+    currentNode = compressor.output;
+  }
+
+  if (masterEffects.delay?.enabled) {
+    const delay = getOrCreateDelayNode(ctx, MASTER_FX_NODE_KEY, masterEffects.delay);
+    currentNode.connect(delay.input);
+    currentNode = delay.output;
+  }
+
+  if (masterEffects.reverb?.enabled) {
+    const reverb = getOrCreateReverbNode(ctx, MASTER_FX_NODE_KEY, masterEffects.reverb);
+    currentNode.connect(reverb.input);
+    currentNode = reverb.output;
+  }
+
+  currentNode.connect(ctx.destination);
+  currentNode.connect(masterSplitterNode);
 }
 
 /**
@@ -204,6 +269,17 @@ export function updateLiveTrackParams(tracks: Track[]): void {
 }
 
 useTrackStore.subscribe((state: TrackState) => updateLiveTrackParams(state.tracks));
+
+// Track the last-applied master effect settings so the insert chain is only
+// rebuilt when they actually change, not on every transport store update
+// (the playhead position updates on every animation frame).
+let lastAppliedMasterEffects: MasterEffects | null = null;
+
+useTransportStore.subscribe((state) => {
+  if (state.masterEffects === lastAppliedMasterEffects) return;
+  lastAppliedMasterEffects = state.masterEffects;
+  applyMasterEffects(state.masterEffects);
+});
 
 export function getAudioContext(): AudioContext {
   if (!audioCtx) audioCtx = new AudioContext();

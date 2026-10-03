@@ -29,6 +29,7 @@ export default function ProjectDialog({ onClose, mode }: ProjectDialogProps) {
   const selectionStart = useTransportStore((s) => s.selectionStart);
   const selectionEnd = useTransportStore((s) => s.selectionEnd);
   const masterVolume = useTransportStore((s) => s.masterVolume);
+  const masterEffects = useTransportStore((s) => s.masterEffects);
   const setTransportState = useTransportStore((s) => s.setTransportState);
   
   // Project store
@@ -57,6 +58,7 @@ export default function ProjectDialog({ onClose, mode }: ProjectDialogProps) {
         selectionStart,
         selectionEnd,
         masterVolume,
+        masterEffects,
       }, name.trim());
       onClose();
     } catch (e: unknown) {
@@ -68,7 +70,7 @@ export default function ProjectDialog({ onClose, mode }: ProjectDialogProps) {
     } finally {
       setIsLoading(false);
     }
-  }, [name, tracks, bpm, playheadBeats, isRepeat, zoomLevel, selectionStart, selectionEnd, masterVolume, projectStore, onClose]);
+  }, [name, tracks, bpm, playheadBeats, isRepeat, zoomLevel, selectionStart, selectionEnd, masterVolume, masterEffects, projectStore, onClose]);
 
   const handleNewProject = useCallback(async () => {
     setIsLoading(true);
@@ -114,6 +116,7 @@ export default function ProjectDialog({ onClose, mode }: ProjectDialogProps) {
         selectionStart: transport.selectionStart,
         selectionEnd: transport.selectionEnd,
         masterVolume: transport.masterVolume,
+        masterEffects: transport.masterEffects,
       });
       
       onClose();
@@ -151,6 +154,7 @@ export default function ProjectDialog({ onClose, mode }: ProjectDialogProps) {
         selectionStart: transport.selectionStart,
         selectionEnd: transport.selectionEnd,
         masterVolume: transport.masterVolume,
+        masterEffects: transport.masterEffects,
       });
       onClose();
     } catch (e: unknown) {
@@ -182,6 +186,7 @@ export default function ProjectDialog({ onClose, mode }: ProjectDialogProps) {
         selectionStart: transport.selectionStart,
         selectionEnd: transport.selectionEnd,
         masterVolume: transport.masterVolume,
+        masterEffects: transport.masterEffects,
       });
       
       onClose();

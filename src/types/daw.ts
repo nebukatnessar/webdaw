@@ -67,6 +67,23 @@ export interface DelaySettings {
 }
 
 
+// Master-chain insert effect settings, mirroring the per-track effect
+// settings on Track. Each effect is optional; an unset (or disabled)
+// effect is excluded from the master insert chain.
+export interface MasterEffects {
+  gate?: GateSettings;
+  eq?: EQSettings;
+  compressor?: CompressorSettings;
+  delay?: DelaySettings;
+  reverb?: ReverbSettings;
+}
+
+
+// What an effects dialog (and its control panels) is bound to: a specific
+// track's effect rack, or the master chain.
+export type EffectsTarget = { kind: 'track'; trackId: string } | { kind: 'master' };
+
+
 export interface Track {
   id: string;
   name: string;
@@ -91,4 +108,5 @@ export interface Project {
   bpm: number;
   tracks: Track[];
   masterVolume: number;
+  masterEffects?: MasterEffects;
 }

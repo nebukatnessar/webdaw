@@ -50,3 +50,21 @@
   color: var(--text-dim);
   flex-shrink: 0;
 }
+
+.fxButton {
+  flex-shrink: 0;
+  padding: 4px 10px;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+  color: var(--text-dim);
+  background: var(--bg-2);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.fxButton:hover {
+  color: var(--accent);
+  border-color: var(--accent);
+}

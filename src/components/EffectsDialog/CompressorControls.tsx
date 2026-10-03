@@ -1,10 +1,12 @@
 import { useState, useEffect } from 'react';
-import type { CompressorSettings } from '../../types/daw';
+import type { EffectsTarget, CompressorSettings } from '../../types/daw';
 import { useTrackStore } from '../../store/trackStore';
+import { useTransportStore } from '../../store/transportStore';
 import { getDefaultCompressorSettings } from '../../audio/compressor';
 
 interface CompressorControlsProps {
-  trackId: string;
+  trackId?: string;
+  target?: EffectsTarget;
 }
 
 type NumericCompressorKey = Exclude<keyof CompressorSettings, 'enabled'>;
@@ -18,31 +20,48 @@ const COMPRESSOR_PARAMS = {
   makeupGain: { min: 0, max: 20, step: 1, label: 'Makeup Gain (dB)' },
 } as const;
 
-export default function CompressorControls({ trackId }: CompressorControlsProps) {
+export default function CompressorControls({ trackId, target }: CompressorControlsProps) {
+  const resolvedTarget: EffectsTarget = target ?? { kind: 'track', trackId: trackId ?? '' };
+  const targetTrackId = resolvedTarget.kind === 'track' ? resolvedTarget.trackId : null;
+  const isMaster = resolvedTarget.kind === 'master';
   const updateTrack = useTrackStore((state) => state.updateTrack);
-  const track = useTrackStore((state) => state.tracks.find((t) => t.id === trackId));
+  const track = useTrackStore((state) =>
+    targetTrackId !== null ? state.tracks.find((t) => t.id === targetTrackId) : undefined
+  );
+  const setMasterEffect = useTransportStore((state) => state.setMasterEffect);
+  const masterCompressor = useTransportStore((state) => (isMaster ? state.masterEffects.compressor : undefined));
+
+  const storedSettings = isMaster ? masterCompressor : track?.compressor;
   
   const [settings, setSettings] = useState<CompressorSettings>(
-    track?.compressor || getDefaultCompressorSettings()
+    storedSettings || getDefaultCompressorSettings()
   );
 
-  // Sync with store when track changes
+  // Sync with store when settings change
   useEffect(() => {
-    if (track?.compressor) {
-      setSettings(track.compressor);
+    if (storedSettings) {
+      setSettings(storedSettings);
     }
-  }, [track?.compressor]);
+  }, [storedSettings]);
+
+  const writeSettings = (newSettings: CompressorSettings) => {
+    if (targetTrackId !== null) {
+      updateTrack(targetTrackId, { compressor: newSettings });
+    } else {
+      setMasterEffect('compressor', newSettings);
+    }
+  };
 
   const handleChange = (param: NumericCompressorKey, value: number) => {
     const newSettings = { ...settings, [param]: value };
     setSettings(newSettings);
-    updateTrack(trackId, { compressor: newSettings });
+    writeSettings(newSettings);
   };
 
   const handleEnabledChange = (enabled: boolean) => {
     const newSettings = { ...settings, enabled };
     setSettings(newSettings);
-    updateTrack(trackId, { compressor: newSettings });
+    writeSettings(newSettings);
   };
 
   return (

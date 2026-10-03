@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import type { MasterEffects } from '../types/daw';
 
 interface TransportState {
   bpm: number;
@@ -11,6 +12,7 @@ interface TransportState {
   selectionStart: number | null;
   selectionEnd: number | null;
   masterVolume: number;
+  masterEffects: MasterEffects;
   setBpm: (bpm: number) => void;
   play: () => void;
   pause: () => void;
@@ -23,6 +25,7 @@ interface TransportState {
   setSelection: (start: number | null, end: number | null) => void;
   clearSelection: () => void;
   setMasterVolume: (volume: number) => void;
+  setMasterEffect: <K extends keyof MasterEffects>(effect: K, settings: MasterEffects[K]) => void;
   setTransportState: (state: {
     bpm: number;
     playheadBeats: number;
@@ -33,6 +36,7 @@ interface TransportState {
     selectionStart: number | null;
     selectionEnd: number | null;
     masterVolume?: number;
+    masterEffects?: MasterEffects;
   }) => void;
 }
 
@@ -47,6 +51,7 @@ export const useTransportStore = create<TransportState>((set) => ({
   selectionStart: null,
   selectionEnd: null,
   masterVolume: 1,
+  masterEffects: {},
   setBpm: (bpm) => set({ bpm }),
   play: () => set({ isPlaying: true }),
   pause: () => set({ isPlaying: false }),
@@ -59,6 +64,11 @@ export const useTransportStore = create<TransportState>((set) => ({
   setSelection: (start, end) => set({ selectionStart: start, selectionEnd: end }),
   clearSelection: () => set({ selectionStart: null, selectionEnd: null }),
   setMasterVolume: (masterVolume) => set({ masterVolume: Math.max(0, Math.min(2, masterVolume)) }),
+  setMasterEffect: (effect, settings) => set((state) => {
+    const masterEffects = { ...state.masterEffects };
+    masterEffects[effect] = settings;
+    return { masterEffects };
+  }),
   setTransportState: (state) => set({
     bpm: state.bpm,
     playheadBeats: state.playheadBeats,
@@ -70,6 +80,8 @@ export const useTransportStore = create<TransportState>((set) => ({
     selectionEnd: state.selectionEnd,
     // Older saved projects won't have this field - default to unity gain.
     masterVolume: Math.max(0, Math.min(2, state.masterVolume ?? 1)),
+    // Older saved projects won't have master effects - default to all bypassed.
+    masterEffects: state.masterEffects ?? {},
   }),
 }));
 
