@@ -35,7 +35,7 @@ export interface TrackState {
   toggleClipSelection: (clipId: string) => void;
   clearSelectedClips: () => void;
   splitClip: (trackId: string, clipId: string, splitBeat: number) => void;
-  splitClipsAt: (splitBeats: number[]) => void;
+  splitClipsAt: (splitBeats: number[], trackIds?: string[]) => void;
   quantizeSelected: (gridBeats: number) => void;
   trimClip: (clipId: string, updates: Pick<Clip, 'startBeat' | 'durationBeats'> & Partial<Pick<Clip, 'bufferOffsetBeats'>>) => void;
   addClip: {
@@ -379,29 +379,49 @@ export const useTrackStore = create<TrackState>((set) => ({
     });
   },
 
-  splitClipsAt: (splitBeats) => {
+  splitClipsAt: (splitBeats, trackIds) => {
     set((state) => {
       const boundaries = [...new Set(splitBeats.filter(Number.isFinite))].sort((a, b) => a - b);
-      let didSplit = false;
-      const tracks = state.tracks.map((track) => ({
-        ...track,
-        clips: track.clips.flatMap((clip) => {
-          const clipBoundaries = boundaries.filter(
-            (beat) => beat > clip.startBeat && beat < clip.startBeat + clip.durationBeats
-          );
-          if (clipBoundaries.length === 0) return [clip];
 
-          didSplit = true;
-          const splitPoints = [clip.startBeat, ...clipBoundaries, clip.startBeat + clip.durationBeats];
-          return splitPoints.slice(1).map((endBeat, index) => ({
-            ...clip,
-            id: index === 0 ? clip.id : generateClipId(),
-            startBeat: splitPoints[index],
-            durationBeats: endBeat - splitPoints[index],
-            bufferOffsetBeats: (clip.bufferOffsetBeats ?? 0) + splitPoints[index] - clip.startBeat,
-          }));
-        }),
-      }));
+      // Split only on the target tracks (issue #152): explicit trackIds if
+      // given, otherwise the selected tracks, falling back to the active
+      // track, and defensively to all tracks.
+      let targetTrackIds: string[];
+      if (trackIds) {
+        targetTrackIds = trackIds;
+      } else if (state.selectedTrackIds.length > 0) {
+        targetTrackIds = state.selectedTrackIds;
+      } else if (state.activeTrackId) {
+        targetTrackIds = [state.activeTrackId];
+      } else {
+        targetTrackIds = state.tracks.map((t) => t.id);
+      }
+      const target = new Set(targetTrackIds);
+
+      let didSplit = false;
+      const tracks = state.tracks.map((track) => {
+        // Untouched tracks keep their object identity (issue #152)
+        if (!target.has(track.id)) return track;
+        return {
+          ...track,
+          clips: track.clips.flatMap((clip) => {
+            const clipBoundaries = boundaries.filter(
+              (beat) => beat > clip.startBeat && beat < clip.startBeat + clip.durationBeats
+            );
+            if (clipBoundaries.length === 0) return [clip];
+
+            didSplit = true;
+            const splitPoints = [clip.startBeat, ...clipBoundaries, clip.startBeat + clip.durationBeats];
+            return splitPoints.slice(1).map((endBeat, index) => ({
+              ...clip,
+              id: index === 0 ? clip.id : generateClipId(),
+              startBeat: splitPoints[index],
+              durationBeats: endBeat - splitPoints[index],
+              bufferOffsetBeats: (clip.bufferOffsetBeats ?? 0) + splitPoints[index] - clip.startBeat,
+            }));
+          }),
+        };
+      });
 
       if (!didSplit) return state;
       return {
