@@ -282,7 +282,7 @@ export default function ClipBlock({ clip }: Props) {
 
   return (
     <div
-      className={`${styles.clip} ${isSelected ? styles.selected : ''}`} data-clip
+      className={`${styles.clip} ${isSelected ? styles.selected : ''} ${clip.muted ? styles.muted : ''}`} data-clip
       style={{ left: effectiveStartBeat * pixelsPerBeat, width: effectiveWidth, background: clip.color }}
       draggable={!isTrimming}
       onDragStart={isTrimming ? undefined : handleDragStart}

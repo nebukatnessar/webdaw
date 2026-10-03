@@ -78,6 +78,12 @@ const clipGainToDb = (clipGain: number | undefined): number =>
   Math.round(20 * Math.log10(clipGain ?? 1) * 10) / 10;
 const dbToClipGain = (db: number): number => Math.pow(10, db / 20);
 
+// Coalescing window for updateTrack undo snapshots: rapid updates to the same
+// track and the same fields within this window share one undo entry, so a
+// slider drag or effect tweak counts as one gesture instead of one per tick.
+const UPDATE_TRACK_UNDO_COALESCE_MS = 1000;
+let lastUpdateTrackUndo: { trackId: string; keys: string; at: number } | null = null;
+
 // Helper function to get selected clips
 const getSelectedClips = (tracks: Track[], selectedClipIds: string[]): { clip: Clip; trackId: string }[] => {
   const selectedClips: { clip: Clip; trackId: string }[] = [];
@@ -108,6 +114,8 @@ export const useTrackStore = create<TrackState>((set) => ({
       tracks: [...state.tracks, { ...track, id, clips: [] }],
       activeTrackId: state.activeTrackId || id,
       selectedTrackIds: state.selectedTrackIds.length === 0 ? [id] : state.selectedTrackIds,
+      undoStack: [...state.undoStack, state.tracks],
+      redoStack: [],
     }));
   },
 
@@ -138,16 +146,31 @@ export const useTrackStore = create<TrackState>((set) => ({
         tracks: [...state.tracks, ...newTracks],
         activeTrackId: newTracks[0]?.id ?? state.activeTrackId,
         selectedTrackIds: newTracks.length > 0 ? [newTracks[0].id] : state.selectedTrackIds,
+        undoStack: [...state.undoStack, state.tracks],
+        redoStack: [],
       };
     });
   },
 
   updateTrack: (trackId, updates) => {
-    set((state) => ({
-      tracks: state.tracks.map((track) =>
-        track.id === trackId ? { ...track, ...updates } : track
-      ),
-    }));
+    set((state) => {
+      const now = Date.now();
+      const keys = Object.keys(updates).sort().join(',');
+      const isContinuation =
+        lastUpdateTrackUndo !== null &&
+        lastUpdateTrackUndo.trackId === trackId &&
+        lastUpdateTrackUndo.keys === keys &&
+        now - lastUpdateTrackUndo.at < UPDATE_TRACK_UNDO_COALESCE_MS;
+      lastUpdateTrackUndo = { trackId, keys, at: now };
+
+      return {
+        tracks: state.tracks.map((track) =>
+          track.id === trackId ? { ...track, ...updates } : track
+        ),
+        undoStack: isContinuation ? state.undoStack : [...state.undoStack, state.tracks],
+        redoStack: isContinuation ? state.redoStack : [],
+      };
+    });
   },
 
   setTracks: (tracks) => {
@@ -177,6 +200,8 @@ export const useTrackStore = create<TrackState>((set) => ({
       tracks: state.tracks.filter((t) => t.id !== trackId),
       selectedTrackIds: state.selectedTrackIds.filter((id) => id !== trackId),
       activeTrackId: state.activeTrackId === trackId ? null : state.activeTrackId,
+      undoStack: [...state.undoStack, state.tracks],
+      redoStack: [],
     }));
   },
 
@@ -255,6 +280,8 @@ export const useTrackStore = create<TrackState>((set) => ({
             }
           : track
       ),
+      undoStack: [...state.undoStack, state.tracks],
+      redoStack: [],
     }));
   },
 
@@ -277,6 +304,8 @@ export const useTrackStore = create<TrackState>((set) => ({
           ? { ...track, clips: track.clips.filter((c) => c.id !== clipId) }
           : track
       ),
+      undoStack: [...state.undoStack, state.tracks],
+      redoStack: [],
     }));
   },
 
@@ -292,6 +321,8 @@ export const useTrackStore = create<TrackState>((set) => ({
             }
           : track
       ),
+      undoStack: [...state.undoStack, state.tracks],
+      redoStack: [],
     }));
   },
 
@@ -363,6 +394,8 @@ export const useTrackStore = create<TrackState>((set) => ({
               }
             : t
         ),
+        undoStack: [...state.undoStack, state.tracks],
+        redoStack: [],
       };
     });
   },
@@ -378,7 +411,9 @@ export const useTrackStore = create<TrackState>((set) => ({
           return { ...clip, ...updates };
         }),
       }));
-      return found ? { tracks } : state;
+      return found
+        ? { tracks, undoStack: [...state.undoStack, state.tracks], redoStack: [] }
+        : state;
     });
   },
 
@@ -485,6 +520,8 @@ export const useTrackStore = create<TrackState>((set) => ({
               }
             : t
         ),
+        undoStack: [...state.undoStack, state.tracks],
+        redoStack: [],
       };
     });
   },
@@ -513,6 +550,8 @@ export const useTrackStore = create<TrackState>((set) => ({
               }
             : t
         ),
+        undoStack: [...state.undoStack, state.tracks],
+        redoStack: [],
       };
     });
   },
@@ -550,6 +589,8 @@ export const useTrackStore = create<TrackState>((set) => ({
           }
           return track;
         }),
+        undoStack: [...state.undoStack, state.tracks],
+        redoStack: [],
       };
     });
   },
@@ -569,6 +610,8 @@ export const useTrackStore = create<TrackState>((set) => ({
               }
             : track
         ),
+        undoStack: [...state.undoStack, state.tracks],
+        redoStack: [],
       };
     });
   },
@@ -587,6 +630,8 @@ export const useTrackStore = create<TrackState>((set) => ({
         tracks: newTracks,
         clipboard: selectedClips.map(({ clip }) => clip),
         selectedClipIds: [],
+        undoStack: [...state.undoStack, state.tracks],
+        redoStack: [],
       };
     });
   },
@@ -623,12 +668,15 @@ export const useTrackStore = create<TrackState>((set) => ({
             : track
         ),
         selectedClipIds: newClips.map((clip) => clip.id),
+        undoStack: [...state.undoStack, state.tracks],
+        redoStack: [],
       };
     });
   },
 
   deleteSelectedClips: () => {
     set((state) => {
+      if (state.selectedClipIds.length === 0) return state;
       const newTracks = state.tracks.map((track) => ({
         ...track,
         clips: track.clips.filter((clip) => !state.selectedClipIds.includes(clip.id)),
@@ -637,6 +685,8 @@ export const useTrackStore = create<TrackState>((set) => ({
       return {
         tracks: newTracks,
         selectedClipIds: [],
+        undoStack: [...state.undoStack, state.tracks],
+        redoStack: [],
       };
     });
   },
@@ -731,23 +781,33 @@ export const useTrackStore = create<TrackState>((set) => ({
 
   // New functions for multi-track controls
   toggleArmSelected: () => {
-    set((state) => ({
-      tracks: state.tracks.map((t) =>
-        state.selectedTrackIds.includes(t.id)
-          ? { ...t, armed: !t.armed }
-          : t
-      ),
-    }));
+    set((state) => {
+      if (state.selectedTrackIds.length === 0) return state;
+      return {
+        tracks: state.tracks.map((t) =>
+          state.selectedTrackIds.includes(t.id)
+            ? { ...t, armed: !t.armed }
+            : t
+        ),
+        undoStack: [...state.undoStack, state.tracks],
+        redoStack: [],
+      };
+    });
   },
 
   toggleMuteSelected: () => {
-    set((state) => ({
-      tracks: state.tracks.map((t) =>
-        state.selectedTrackIds.includes(t.id)
-          ? { ...t, muted: !t.muted }
-          : t
-      ),
-    }));
+    set((state) => {
+      if (state.selectedTrackIds.length === 0) return state;
+      return {
+        tracks: state.tracks.map((t) =>
+          state.selectedTrackIds.includes(t.id)
+            ? { ...t, muted: !t.muted }
+            : t
+        ),
+        undoStack: [...state.undoStack, state.tracks],
+        redoStack: [],
+      };
+    });
   },
 
   toggleSoloSelected: () => {
@@ -763,6 +823,8 @@ export const useTrackStore = create<TrackState>((set) => ({
             ? { ...t, soloed: !anySoloed }
             : t
         ),
+        undoStack: [...state.undoStack, state.tracks],
+        redoStack: [],
       };
     });
   },
@@ -783,7 +845,11 @@ export const useTrackStore = create<TrackState>((set) => ({
       }));
 
       if (!didToggle) return state;
-      return { tracks };
+      return {
+        tracks,
+        undoStack: [...state.undoStack, state.tracks],
+        redoStack: [],
+      };
     });
   },
 
@@ -814,6 +880,8 @@ export const useTrackStore = create<TrackState>((set) => ({
         tracks: newTracks,
         selectedTrackIds: newSelectedTrackIds,
         activeTrackId: newActiveTrackId,
+        undoStack: [...state.undoStack, state.tracks],
+        redoStack: [],
       };
     });
   },
@@ -874,7 +942,7 @@ export const useTrackStore = create<TrackState>((set) => ({
       const newTracks = [...state.tracks];
       const [trackToMove] = newTracks.splice(fromIndex, 1);
       newTracks.splice(toIndex, 0, trackToMove);
-      return { tracks: newTracks };
+      return { tracks: newTracks, undoStack: [...state.undoStack, state.tracks], redoStack: [] };
     });
   },
 }));

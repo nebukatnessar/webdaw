@@ -58,6 +58,7 @@ export interface SerializedClip {
   color: string;
   bufferOffsetBeats: number;
   clipGain?: number; // Linear amplitude multiplier (1 = unity); absent in older projects
+  muted?: boolean; // Clip-level mute; absent in older projects (unmuted)
   audioFile: string | null; // Relative path to audio file, e.g., "audio/clip1.wav"
   // Session-scoped id into the in-memory audio buffer cache. Only meaningful
   // for the localStorage auto-save round-trip (restoring across a refresh

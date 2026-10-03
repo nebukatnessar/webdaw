@@ -70,6 +70,7 @@ export async function exportTrackAsWAV(
     if (!clip.audioBufferId) continue;
     const buffer = getBuffer(clip.audioBufferId);
     if (!buffer) continue;
+    if (clip.muted) continue;
     
     const clipStartSecs = clip.startBeat * beatsToSecs;
     const source = offlineCtx.createBufferSource();
@@ -176,6 +177,7 @@ export async function exportProjectAsWAV(
       if (!clip.audioBufferId) continue;
       const buffer = getBuffer(clip.audioBufferId);
       if (!buffer) continue;
+      if (clip.muted) continue;
       
       const clipStartSecs = clip.startBeat * beatsToSecs;
       const source = offlineCtx.createBufferSource();

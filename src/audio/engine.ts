@@ -33,6 +33,9 @@ import {
 let audioCtx: AudioContext | null = null;
 const bufferMap = new Map<string, AudioBuffer>();
 const activeSources: AudioBufferSourceNode[] = [];
+// Per-clip gain nodes for sources currently scheduled, keyed by clip id, so
+// clip mute (and clip gain) changes apply live to already-playing sources.
+const activeClipGainNodes = new Map<string, Set<GainNode>>();
 
 // Single persistent master gain node that every track routes through
 // before reaching the speakers, so there's one final volume stage for the
@@ -268,7 +271,27 @@ export function updateLiveTrackParams(tracks: Track[]): void {
   }
 }
 
-useTrackStore.subscribe((state: TrackState) => updateLiveTrackParams(state.tracks));
+/**
+ * Applies clip-level mute (and clip gain) to sources that are already
+ * playing, so toggling M on selected clips takes effect live - the same
+ * way track mute/solo does - without re-scheduling anything.
+ */
+function applyLiveClipMute(tracks: Track[]): void {
+  if (activeClipGainNodes.size === 0) return;
+  for (const track of tracks) {
+    for (const clip of track.clips) {
+      const nodes = activeClipGainNodes.get(clip.id);
+      if (!nodes) continue;
+      const gain = clip.muted ? 0 : (clip.clipGain ?? 1);
+      for (const node of nodes) node.gain.value = gain;
+    }
+  }
+}
+
+useTrackStore.subscribe((state: TrackState) => {
+  updateLiveTrackParams(state.tracks);
+  applyLiveClipMute(state.tracks);
+});
 
 // Track the last-applied master effect settings so the insert chain is only
 // rebuilt when they actually change, not on every transport store update
@@ -372,15 +395,27 @@ export function schedulePlayback(
       // multiplies before track gain and unity-gain clips behave exactly as
       // before. Created per scheduled source, so it dies with the source.
       const clipGainNode = ctx.createGain();
-      clipGainNode.gain.value = clip.clipGain ?? 1;
+      clipGainNode.gain.value = clip.muted ? 0 : (clip.clipGain ?? 1);
       source.connect(clipGainNode);
       clipGainNode.connect(gainNode);
       source.start(when, offset, duration);
+
+      let clipNodes = activeClipGainNodes.get(clip.id);
+      if (!clipNodes) {
+        clipNodes = new Set();
+        activeClipGainNodes.set(clip.id, clipNodes);
+      }
+      clipNodes.add(clipGainNode);
 
       activeSources.push(source);
       source.onended = () => {
         const idx = activeSources.indexOf(source);
         if (idx !== -1) activeSources.splice(idx, 1);
+        const nodes = activeClipGainNodes.get(clip.id);
+        if (nodes) {
+          nodes.delete(clipGainNode);
+          if (nodes.size === 0) activeClipGainNodes.delete(clip.id);
+        }
       };
     }
   }

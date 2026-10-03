@@ -22,6 +22,12 @@
   filter: brightness(1.1);
 }
 
+/* Muted clips read grayed out; kept after .selected so it wins when both apply */
+.clip.muted {
+  filter: grayscale(0.9);
+  opacity: 0.45;
+}
+
 .name {
   font-size: 11px;
   color: var(--text);
