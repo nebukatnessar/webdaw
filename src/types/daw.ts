@@ -12,8 +12,13 @@ export interface Clip {
   muted?: boolean; // Add this property. Default: false.
   fadeInDuration?: number; // Fade-in length in beats (0 or undefined = no fade)
   fadeOutDuration?: number; // Fade-out length in beats (0 or undefined = no fade)
-  fadeType?: 'linear' | 'exponential'; // Fade curve shape (default: 'exponential': quick swell in, smooth tail out)
+  fadeType?: FadeType; // Fade curve shape (default: 'exponential'; double-click a fade handle to cycle shapes)
 }
+
+// Fade curve shapes. 'exponential' swells in quickly and releases with an
+// accelerating dive; 'logarithmic' is its mirror (slow swell in, early
+// release with a long tail); 'linear' is a straight amplitude ramp.
+export type FadeType = 'linear' | 'exponential' | 'logarithmic';
 
 
 export interface CompressorSettings {

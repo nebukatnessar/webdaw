@@ -12,6 +12,7 @@ import { getDefaultGateSettings } from '../audio/gate';
 import { getDefaultEQSettings } from '../audio/eq';
 import { getDefaultReverbSettings } from '../audio/reverb';
 import { getDefaultDelaySettings } from '../audio/delay';
+import { normalizeFadeType } from '../audio/clip';
 import type { ReverbRoomType } from '../types/daw';
 
 // Project version for forward compatibility
@@ -163,7 +164,7 @@ export function convertToTracks(serializedTracks: SerializedTrack[]): Track[] {
       muted: clip.muted ?? false,
       fadeInDuration: clip.fadeInDuration ?? 0,
       fadeOutDuration: clip.fadeOutDuration ?? 0,
-      fadeType: clip.fadeType === 'linear' ? 'linear' : 'exponential',
+      fadeType: normalizeFadeType(clip.fadeType),
       // Carried through for the localStorage auto-save round-trip; loading
       // from a real project folder overwrites this via loadAllAudioFiles.
       audioBufferId: clip.audioBufferId,

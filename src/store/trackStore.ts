@@ -1,6 +1,6 @@
 // Track Store with undo/redo functionality
 import { create } from 'zustand';
-import { Track, Clip } from '../types/daw';
+import { Track, Clip, FadeType } from '../types/daw';
 import { generateClipId } from '../utils/idGenerator';
 
 export interface TrackState {
@@ -57,7 +57,7 @@ export interface TrackState {
   endClipGainSession: () => void;
   setClipFadeIn: (clipId: string, durationBeats: number) => void;
   setClipFadeOut: (clipId: string, durationBeats: number) => void;
-  setClipFadeType: (clipId: string, fadeType: 'linear' | 'exponential') => void;
+  setClipFadeType: (clipId: string, fadeType: FadeType) => void;
 
   // New functions for multi-track controls
   toggleArmSelected: () => void;
@@ -828,7 +828,7 @@ export const useTrackStore = create<TrackState>((set) => ({
         ...track,
         clips: track.clips.map((clip) => {
           if (clip.id !== clipId) return clip;
-          if ((clip.fadeType ?? 'linear') === fadeType) return clip;
+          if ((clip.fadeType ?? 'exponential') === fadeType) return clip;
           didChange = true;
           return { ...clip, fadeType };
         }),
