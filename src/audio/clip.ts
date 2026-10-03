@@ -1,8 +1,16 @@
 import type { Clip } from '../types/daw';
 
-// Number of linear segments used to schedule a quadratic ("exponential")
-// fade curve, so the scheduled shape matches clipEnvelopeValueAt at every
-// point and can be rebuilt mid-fade without discontinuities.
+// Exponential fades change quickly at the silent end of the fade and
+// settle toward full level - the shape that reads as a smooth, musical
+// fade (a fade-in swells in quickly instead of lurking inaudible for most
+// of its length; a fade-out drops away early with a long tail). Web Audio's
+// exponentialRamp cannot reach 0, so fades start and end at a -60 dB floor
+// relative to the peak and step to/from true silence at the clip edges.
+const EXPONENTIAL_FLOOR_RATIO = Math.pow(10, -60 / 20); // 0.001
+
+// The exponential fade-in rises so steeply near its start that it is not a
+// pure exponential ramp, so it is scheduled as short linear segments that
+// sample fadeCurveValueAt at every point.
 const FADE_CURVE_STEPS = 16;
 
 export interface ClipGainEnvelope {
@@ -17,7 +25,8 @@ export interface ClipGainEnvelope {
  * Derives the per-clip gain envelope (mute, clip gain, fade-in/out) for a
  * clip at the given BPM. Fade durations live on the clip in beats and are
  * converted to seconds here, clamped to the clip's own duration so a fade
- * can never exceed the clip (e.g. after a trim or a split).
+ * can never exceed the clip (e.g. after a trim or a split). Fades default
+ * to the exponential (constant-dB) curve when no type is set.
  */
 export function clipGainEnvelope(clip: Clip, bpm: number): ClipGainEnvelope {
   const beatsToSecs = 60 / bpm;
@@ -27,8 +36,24 @@ export function clipGainEnvelope(clip: Clip, bpm: number): ClipGainEnvelope {
     muted: clip.muted ?? false,
     fadeInSecs: Math.min(Math.max(0, clip.fadeInDuration ?? 0) * beatsToSecs, totalSecs),
     fadeOutSecs: Math.min(Math.max(0, clip.fadeOutDuration ?? 0) * beatsToSecs, totalSecs),
-    exponential: (clip.fadeType ?? 'linear') === 'exponential',
+    exponential: (clip.fadeType ?? 'exponential') === 'exponential',
   };
+}
+
+/**
+ * Normalized fade curve shape (0..1) at progress `t` into a fade. Linear fades
+ * move at constant amplitude. Exponential fades change quickly at the
+ * silent end of the fade and settle toward full level - the fade-in rises
+ * fast from the corner then flattens, the fade-out leaves full level early
+ * with a smooth tail. Used both for audio scheduling and for drawing the
+ * fade line on the clip.
+ */
+export function fadeCurveValueAt(exponential: boolean, phase: 'in' | 'out', t: number): number {
+  const tc = Math.max(0, Math.min(1, t));
+  if (!exponential) return phase === 'in' ? tc : 1 - tc;
+  return phase === 'in'
+    ? 1 - Math.pow(EXPONENTIAL_FLOOR_RATIO, tc)
+    : Math.pow(EXPONENTIAL_FLOOR_RATIO, tc);
 }
 
 /**
@@ -42,39 +67,24 @@ export function clipEnvelopeValueAt(
   if (env.muted) return 0;
   const pos = Math.max(0, Math.min(positionSecs, totalSecs));
   if (env.fadeInSecs > 0 && pos < env.fadeInSecs) {
-    const t = pos / env.fadeInSecs;
-    return env.peak * (env.exponential ? t * t : t);
+    return env.peak * fadeCurveValueAt(env.exponential, 'in', pos / env.fadeInSecs);
   }
   const fadeOutStart = totalSecs - env.fadeOutSecs;
   if (env.fadeOutSecs > 0 && pos > fadeOutStart) {
-    const t = (pos - fadeOutStart) / env.fadeOutSecs;
-    const inv = 1 - t;
-    return env.peak * (env.exponential ? inv * inv : inv);
+    return env.peak * fadeCurveValueAt(env.exponential, 'out', (pos - fadeOutStart) / env.fadeOutSecs);
   }
   return env.peak;
 }
 
-// Schedules a curve from startValue to endValue. Linear fades are a single
-// ramp; exponential (quadratic) fades are sampled as short linear segments
-// so they match clipEnvelopeValueAt at every point.
-function scheduleCurve(
-  param: AudioParam,
-  startValue: number,
-  endValue: number,
-  startTime: number,
-  endTime: number,
-  progressAt: (t: number) => number,
-): void {
-  if (endTime <= startTime) {
-    param.setValueAtTime(endValue, startTime);
-    return;
-  }
-  for (let i = 1; i <= FADE_CURVE_STEPS; i++) {
-    const t = i / FADE_CURVE_STEPS;
-    param.linearRampToValueAtTime(
-      startValue + (endValue - startValue) * progressAt(t),
-      startTime + (endTime - startTime) * t,
-    );
+// Schedules a fade segment between the previously anchored value and
+// `toValue`. Both curve types are native Web Audio ramps, and both have the
+// same closed form as fadeCurveValueAt, so an envelope rebuilt mid-fade
+// continues the exact same curve.
+function scheduleFadeCurve(param: AudioParam, env: ClipGainEnvelope, toValue: number, endTime: number): void {
+  if (env.exponential) {
+    param.exponentialRampToValueAtTime(toValue, endTime);
+  } else {
+    param.linearRampToValueAtTime(toValue, endTime);
   }
 }
 
@@ -97,7 +107,7 @@ export function scheduleClipGainEnvelope(
   const beatsToSecs = 60 / bpm;
   const totalSecs = Math.max(0, clip.durationBeats * beatsToSecs);
   const env = clipGainEnvelope(clip, bpm);
-  if (env.muted) {
+  if (env.muted || env.peak <= 0) {
     param.setValueAtTime(0, startCtxTime);
     return;
   }
@@ -108,16 +118,23 @@ export function scheduleClipGainEnvelope(
   // Anchor the envelope at the start of this window
   param.setValueAtTime(clipEnvelopeValueAt(env, totalSecs, positionSecs), startCtxTime);
 
-  // Remaining fade-in
+  // Remaining fade-in. The exponential fade-in starts at true silence, so
+  // it cannot use exponentialRamp - it is sampled as short linear segments
+  // matching fadeCurveValueAt (also when rebuilt mid-fade).
   if (env.fadeInSecs > 0 && positionSecs < env.fadeInSecs) {
-    scheduleCurve(
-      param,
-      clipEnvelopeValueAt(env, totalSecs, positionSecs),
-      env.peak,
-      startCtxTime,
-      toCtxTime(env.fadeInSecs),
-      (t) => (env.exponential ? t * t : t),
-    );
+    if (env.exponential) {
+      const startProgress = positionSecs / env.fadeInSecs;
+      const remaining = env.fadeInSecs - positionSecs;
+      for (let i = 1; i <= FADE_CURVE_STEPS; i++) {
+        const p = startProgress + (1 - startProgress) * (i / FADE_CURVE_STEPS);
+        param.linearRampToValueAtTime(
+          env.peak * fadeCurveValueAt(true, 'in', p),
+          startCtxTime + (p - startProgress) * remaining,
+        );
+      }
+    } else {
+      scheduleFadeCurve(param, env, env.peak, toCtxTime(env.fadeInSecs));
+    }
   }
 
   // Remaining fade-out. The fade-out start is kept at or after the fade-in
@@ -128,13 +145,12 @@ export function scheduleClipGainEnvelope(
     if (fadeOutStartSecs > positionSecs) {
       param.setValueAtTime(env.peak, toCtxTime(fadeOutStartSecs));
     }
-    scheduleCurve(
-      param,
-      env.peak,
-      0,
-      Math.max(startCtxTime, toCtxTime(fadeOutStartSecs)),
-      endCtxTime,
-      (t) => 1 - (1 - t) * (1 - t),
-    );
+    // Linear fades ramp all the way to 0; exponential ramps stop at the
+    // -60 dB floor and step to true silence at the clip's end.
+    const fadeFloor = env.exponential ? env.peak * EXPONENTIAL_FLOOR_RATIO : 0;
+    scheduleFadeCurve(param, env, fadeFloor, endCtxTime);
+    if (env.exponential) {
+      param.setValueAtTime(0, endCtxTime);
+    }
   }
 }

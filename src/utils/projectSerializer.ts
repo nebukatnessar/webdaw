@@ -125,7 +125,7 @@ export function createProjectFromState(
         muted: clip.muted ?? false,
         fadeInDuration: clip.fadeInDuration ?? 0,
         fadeOutDuration: clip.fadeOutDuration ?? 0,
-        fadeType: clip.fadeType ?? 'linear',
+        fadeType: clip.fadeType ?? 'exponential',
         audioFile: clip.audioFile ?? null,
         audioBufferId: clip.audioBufferId,
       })),
@@ -163,7 +163,7 @@ export function convertToTracks(serializedTracks: SerializedTrack[]): Track[] {
       muted: clip.muted ?? false,
       fadeInDuration: clip.fadeInDuration ?? 0,
       fadeOutDuration: clip.fadeOutDuration ?? 0,
-      fadeType: clip.fadeType === 'exponential' ? 'exponential' : 'linear',
+      fadeType: clip.fadeType === 'linear' ? 'linear' : 'exponential',
       // Carried through for the localStorage auto-save round-trip; loading
       // from a real project folder overwrites this via loadAllAudioFiles.
       audioBufferId: clip.audioBufferId,

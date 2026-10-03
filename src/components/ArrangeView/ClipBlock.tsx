@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import type { Clip } from '../../types/daw';
 import { getBuffer } from '../../audio/engine';
+import { fadeCurveValueAt } from '../../audio/clip';
 import { usePixelsPerBeat } from '../../store/transportStore';
 import { useTransportStore } from '../../store/transportStore';
 import { useTrackStore } from '../../store/trackStore';
@@ -435,37 +436,48 @@ function drawWaveform(canvas: HTMLCanvasElement, buffer: AudioBuffer, clip: Clip
     ctx.fillRect(x, yTop, 1, Math.max(1, yBot - yTop));
   }
 
-  // Fade overlays: shaded triangle plus a diagonal line from the clip edge,
-  // matching what the audio envelope does at playback.
+  // Fade overlays: the shaded region under the fade curve plus the curve
+  // line itself, drawn with the same shape the audio envelope plays.
   const fadeInBeats = Math.min(clip.fadeInDuration ?? 0, clip.durationBeats);
   const fadeOutBeats = Math.min(clip.fadeOutDuration ?? 0, clip.durationBeats);
+  const exponential = (clip.fadeType ?? 'exponential') === 'exponential';
   ctx.lineWidth = 1;
   ctx.strokeStyle = 'rgba(255, 255, 255, 0.85)';
   ctx.fillStyle = 'rgba(0, 0, 0, 0.3)';
   if (fadeInBeats > 0 && clip.durationBeats > 0) {
-    const fadeWidth = (fadeInBeats / clip.durationBeats) * width;
+    const fadeWidth = Math.max(1, (fadeInBeats / clip.durationBeats) * width);
+    const points: [number, number][] = [];
+    for (let x = 0; x <= fadeWidth; x++) {
+      const v = fadeCurveValueAt(exponential, 'in', x / fadeWidth);
+      points.push([x, height * (1 - v)]);
+    }
     ctx.beginPath();
     ctx.moveTo(0, height);
-    ctx.lineTo(fadeWidth, 0);
+    for (const [x, y] of points) ctx.lineTo(x, y);
     ctx.lineTo(0, 0);
     ctx.closePath();
     ctx.fill();
     ctx.beginPath();
-    ctx.moveTo(0, height);
-    ctx.lineTo(fadeWidth, 0);
+    ctx.moveTo(points[0][0], points[0][1]);
+    for (const [x, y] of points) ctx.lineTo(x, y);
     ctx.stroke();
   }
   if (fadeOutBeats > 0 && clip.durationBeats > 0) {
-    const fadeWidth = (fadeOutBeats / clip.durationBeats) * width;
+    const fadeWidth = Math.max(1, (fadeOutBeats / clip.durationBeats) * width);
+    const points: [number, number][] = [];
+    for (let i = 0; i <= fadeWidth; i++) {
+      const v = fadeCurveValueAt(exponential, 'out', i / fadeWidth);
+      points.push([width - fadeWidth + i, height * (1 - v)]);
+    }
     ctx.beginPath();
-    ctx.moveTo(width, height);
-    ctx.lineTo(width - fadeWidth, 0);
+    ctx.moveTo(width - fadeWidth, 0);
+    for (const [x, y] of points) ctx.lineTo(x, y);
     ctx.lineTo(width, 0);
     ctx.closePath();
     ctx.fill();
     ctx.beginPath();
-    ctx.moveTo(width, height);
-    ctx.lineTo(width - fadeWidth, 0);
+    ctx.moveTo(points[0][0], points[0][1]);
+    for (const [x, y] of points) ctx.lineTo(x, y);
     ctx.stroke();
   }
 }

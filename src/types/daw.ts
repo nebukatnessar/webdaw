@@ -12,7 +12,7 @@ export interface Clip {
   muted?: boolean; // Add this property. Default: false.
   fadeInDuration?: number; // Fade-in length in beats (0 or undefined = no fade)
   fadeOutDuration?: number; // Fade-out length in beats (0 or undefined = no fade)
-  fadeType?: 'linear' | 'exponential'; // Fade curve shape (default: 'linear')
+  fadeType?: 'linear' | 'exponential'; // Fade curve shape (default: 'exponential': quick swell in, smooth tail out)
 }
 
 
