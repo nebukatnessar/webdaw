@@ -17,6 +17,10 @@
   cursor: grab;
 }
 
+.clip.slip-mode {
+  cursor: ew-resize;
+}
+
 .clip.selected {
   outline: 1.5px solid var(--accent);
   filter: brightness(1.1);
