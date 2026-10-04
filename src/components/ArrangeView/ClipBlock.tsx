@@ -148,7 +148,7 @@ export default function ClipBlock({ clip }: Props) {
     // Update local preview
     setSlipBufferOffsetBeats(clampedBufferOffset);
   };
-  
+
   // Handle pointer up for selection
   const handlePointerUp = (e: React.PointerEvent<HTMLDivElement>) => {
     if (isTrimming) return;
@@ -435,7 +435,7 @@ export default function ClipBlock({ clip }: Props) {
         left: effectiveStartBeat * pixelsPerBeat, 
         width: effectiveWidth, 
         background: clip.color,
-        cursor: isSlipping ? 'ew-resize' : (e.altKey ? 'ew-resize' : undefined)
+        cursor: isSlipping ? 'ew-resize' : undefined
       }}
       draggable={!isTrimming && !isFading && !isSlipping}
       onDragStart={isTrimming || isFading || isSlipping ? undefined : handleDragStart}
