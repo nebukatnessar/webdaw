@@ -17,6 +17,12 @@ const MIN_CLIP_BEATS = 0.05;
 // Drag threshold in pixels to distinguish between click and drag
 const DRAG_THRESHOLD = 4;
 
+// Canvas raster width cap. Very long clips would otherwise allocate a canvas wider
+// than the browser maximum canvas size, where 2D drawing silently fails and the
+// waveform renders blank. CSS (width: 100%) stretches the raster to the clip
+// width regardless, so the cap only limits resolution of very zoomed-out clips.
+const MAX_CANVAS_WIDTH = 8192;
+
 export default function ClipBlock({ clip }: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const pixelsPerBeat = usePixelsPerBeat();
@@ -411,21 +417,36 @@ export default function ClipBlock({ clip }: Props) {
 
   useEffect(() => {
     const canvas = canvasRef.current;
-    if (!canvas || !clip.audioBufferId) return;
-    const buffer = getBuffer(clip.audioBufferId);
-    if (!buffer) return;
-    
-    // Create a temporary clip object with the effective values for drawing
-    const effectiveClip: Clip = {
-      ...clip,
-      startBeat: effectiveStartBeat,
-      bufferOffsetBeats: effectiveBufferOffsetBeats,
-      durationBeats: effectiveDurationBeats,
-      fadeInDuration: effectiveFadeIn,
-      fadeOutDuration: effectiveFadeOut,
+    const bufferId = clip.audioBufferId;
+    if (!canvas || !bufferId) return;
+
+    const drawIfReady = (): boolean => {
+      const buffer = getBuffer(bufferId);
+      if (!buffer) return false;
+
+      // Create a temporary clip object with the effective values for drawing
+      const effectiveClip: Clip = {
+        ...clip,
+        startBeat: effectiveStartBeat,
+        bufferOffsetBeats: effectiveBufferOffsetBeats,
+        durationBeats: effectiveDurationBeats,
+        fadeInDuration: effectiveFadeIn,
+        fadeOutDuration: effectiveFadeOut,
+      };
+
+      drawWaveform(canvas, buffer, effectiveClip, bpm);
+      return true;
     };
-    
-    drawWaveform(canvas, buffer, effectiveClip, bpm);
+
+    if (drawIfReady()) return;
+
+    // The buffer can still be decoding: project restore hydrates buffers
+    // after the clips have already rendered, so the first draw attempt may
+    // run before the buffer exists. Poll until it lands, then draw once.
+    const timer = window.setInterval(() => {
+      if (drawIfReady()) window.clearInterval(timer);
+    }, 200);
+    return () => window.clearInterval(timer);
   }, [clip.audioBufferId, clip.clipGain, clip.fadeInType, clip.fadeOutType, effectiveFadeIn, effectiveFadeOut, effectiveWidth, effectiveBufferOffsetBeats, effectiveDurationBeats, bpm, isTrimming, isSlipping]);
 
   return (
@@ -477,7 +498,7 @@ export default function ClipBlock({ clip }: Props) {
       />
       
       <span className={styles.name}>{clip.name}</span>
-      <canvas ref={canvasRef} className={styles.canvas} width={effectiveWidth} height={40} />
+      <canvas ref={canvasRef} className={styles.canvas} width={Math.min(effectiveWidth, MAX_CANVAS_WIDTH)} height={40} />
       {clip.clipGain !== undefined && clipGainDb !== 0 && (
         <span className={styles.gainBadge}>
           {clipGainDb > 0 ? '+' + clipGainDb + 'dB' : clipGainDb + 'dB'}
