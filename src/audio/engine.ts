@@ -23,6 +23,7 @@ import {
   getOrCreateReverbNode,
   cleanupReverbNode,
   getDefaultReverbSettings,
+  loadBundledIRs,
 } from './reverb';
 import {
   getOrCreateDelayNode,
@@ -325,7 +326,10 @@ useTransportStore.subscribe((state) => {
 });
 
 export function getAudioContext(): AudioContext {
-  if (!audioCtx) audioCtx = new AudioContext();
+  if (!audioCtx) {
+    audioCtx = new AudioContext();
+    void loadBundledIRs(audioCtx);
+  }
   return audioCtx;
 }
 

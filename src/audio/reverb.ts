@@ -36,10 +36,12 @@ export interface ReverbChain {
 }
 
 const reverbNodes = new Map<string, ReverbChain>();
+const chainRoomTypes = new Map<string, ReverbRoomType>();
 const irCache = new Map<string, AudioBuffer>();
 
-// Map to store custom loaded IRs: roomType -> AudioBuffer
-const customIRs = new Map<ReverbRoomType, AudioBuffer>();
+// Bundled IRs shipped with the app (public/ir/<RoomType>.wav): roomType -> AudioBuffer
+const bundledIRs = new Map<ReverbRoomType, AudioBuffer>();
+let bundledIRsLoading = false;
 
 function generateIR(ctx: BaseAudioContext, config: RoomConfig, decay: number, damping: number): AudioBuffer {
   const sampleRate = ctx.sampleRate;
@@ -83,9 +85,9 @@ function generateIR(ctx: BaseAudioContext, config: RoomConfig, decay: number, da
 function getIR(ctx: BaseAudioContext, roomType: ReverbRoomType, decay: number, damping: number): AudioBuffer {
   const cacheKey = `${roomType}-${decay}-${damping}`;
   
-  // Check for custom loaded IR first
-  if (customIRs.has(roomType)) {
-    return customIRs.get(roomType)!;
+  // Bundled IR takes precedence over the generated one
+  if (bundledIRs.has(roomType)) {
+    return bundledIRs.get(roomType)!;
   }
   
   let ir = irCache.get(cacheKey);
@@ -140,6 +142,7 @@ export function getOrCreateReverbNode(
   settings: ReverbSettings = DEFAULT_REVERB_SETTINGS
 ): ReverbChain {
   let chain = reverbNodes.get(trackId);
+  chainRoomTypes.set(trackId, settings.roomType);
   if (!chain) {
     chain = createReverbChain(ctx, settings);
     reverbNodes.set(trackId, chain);
@@ -168,6 +171,7 @@ export function cleanupReverbNode(trackId: string): void {
     chain.dryGain.disconnect();
     chain.output.disconnect();
     reverbNodes.delete(trackId);
+    chainRoomTypes.delete(trackId);
   }
 }
 
@@ -182,6 +186,7 @@ export function cleanupAllReverbNodes(): void {
     chain.output.disconnect();
   }
   reverbNodes.clear();
+  chainRoomTypes.clear();
 }
 
 export function getReverbNode(trackId: string): GainNode | undefined {
@@ -192,17 +197,34 @@ export function clearIRCache(): void {
   irCache.clear();
 }
 
-// ========== File-based IR functions ==========
+// ========== Bundled IR functions ==========
 
 /**
- * Load a custom IR from a WAV file for a specific room type
+ * Load the IR WAVs shipped in public/ir/<RoomType>.wav. Call once after the
+ * audio context is created. Chains created before a file finishes decoding
+ * use the generated IR and are switched over once its bundled IR is ready.
+ * Missing files are skipped silently (the generated IR stays in effect).
  */
-export async function loadCustomIR(roomType: ReverbRoomType, file: File): Promise<void> {
-  const ctx = new AudioContext();
-  const arrayBuffer = await file.arrayBuffer();
-  const ir = await ctx.decodeAudioData(arrayBuffer);
-  customIRs.set(roomType, ir);
-  clearIRCache();
+export async function loadBundledIRs(ctx: BaseAudioContext): Promise<void> {
+  if (bundledIRsLoading) return;
+  bundledIRsLoading = true;
+  const base = import.meta.env.BASE_URL;
+  const roomTypes = Object.keys(ROOM_CONFIGS) as ReverbRoomType[];
+  await Promise.allSettled(
+    roomTypes.map(async (roomType) => {
+      const response = await fetch(`${base}ir/${roomType}.wav`);
+      if (!response.ok) return;
+      const arrayBuffer = await response.arrayBuffer();
+      const ir = await ctx.decodeAudioData(arrayBuffer);
+      bundledIRs.set(roomType, ir);
+      for (const [trackId, chain] of reverbNodes) {
+        if (chainRoomTypes.get(trackId) === roomType) {
+          chain.convolver.buffer = ir;
+        }
+      }
+    })
+  );
+  bundledIRsLoading = false;
 }
 
 /**
@@ -220,19 +242,4 @@ export function exportIRToWAV(roomType: ReverbRoomType, decay: number, damping: 
  */
 export function getRoomTypes(): ReverbRoomType[] {
   return ['Room', 'Hall', 'Cathedral'];
-}
-
-/**
- * Check if a custom IR is loaded for a room type
- */
-export function hasCustomIR(roomType: ReverbRoomType): boolean {
-  return customIRs.has(roomType);
-}
-
-/**
- * Remove a custom IR
- */
-export function clearCustomIR(roomType: ReverbRoomType): void {
-  customIRs.delete(roomType);
-  clearIRCache();
 }
