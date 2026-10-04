@@ -58,6 +58,7 @@ export interface TrackState {
   setClipFadeIn: (clipId: string, durationBeats: number) => void;
   setClipFadeOut: (clipId: string, durationBeats: number) => void;
   setClipFadeType: (clipId: string, edge: 'in' | 'out', fadeType: FadeType) => void;
+  slipClip: (trackId: string, clipId: string, bufferOffsetBeats: number) => void;
 
   // New functions for multi-track controls
   toggleArmSelected: () => void;
@@ -68,7 +69,7 @@ export interface TrackState {
   
   // Clip-level mute function
   toggleMuteSelectedClips: () => void;
-
+  
   // Reorder tracks by moving a track from one index to another
   reorderTrack: (fromIndex: number, toIndex: number) => void;
 }
@@ -616,6 +617,29 @@ export const useTrackStore = create<TrackState>((set) => ({
         undoStack: [...state.undoStack, state.tracks],
         redoStack: [],
       };
+    });
+  },
+
+  slipClip: (trackId, clipId, bufferOffsetBeats) => {
+    set((state) => {
+      let found = false;
+      const tracks = state.tracks.map((track) => {
+        if (track.id !== trackId) return track;
+        return {
+          ...track,
+          clips: track.clips.map((clip) => {
+            if (clip.id !== clipId) return clip;
+            found = true;
+            return {
+              ...clip,
+              bufferOffsetBeats: Math.max(0, Math.round(bufferOffsetBeats * 1000) / 1000),
+            };
+          }),
+        };
+      });
+      return found
+        ? { tracks, undoStack: [...state.undoStack, state.tracks], redoStack: [] }
+        : state;
     });
   },
 
