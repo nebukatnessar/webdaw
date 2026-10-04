@@ -22,6 +22,7 @@ export default function ClipBlock({ clip }: Props) {
   const pixelsPerBeat = usePixelsPerBeat();
   const bpm = useTransportStore((s) => s.bpm);
   const trimClip = useTrackStore((s) => s.trimClip);
+  const slipClip = useTrackStore((s) => s.slipClip);
   const setClipFadeIn = useTrackStore((s) => s.setClipFadeIn);
   const setClipFadeOut = useTrackStore((s) => s.setClipFadeOut);
   const setClipFadeType = useTrackStore((s) => s.setClipFadeType);
@@ -30,7 +31,9 @@ export default function ClipBlock({ clip }: Props) {
   
   // State for trimming
   const [isTrimming, setIsTrimming] = useState(false);
-
+  const [isSlipping, setIsSlipping] = useState(false);
+  const [slipBufferOffsetBeats, setSlipBufferOffsetBeats] = useState(clip.bufferOffsetBeats ?? 0);
+  
   // State for fade-handle drags (mirrors the trim flow: local values while
   // dragging, committed to the store once on pointer up)
   const [isFading, setIsFading] = useState(false);
@@ -47,7 +50,7 @@ export default function ClipBlock({ clip }: Props) {
   
   // Ref to track if the current interaction is a drag (exceeded threshold)
   const isDraggingRef = useRef(false);
-
+  
   // Ref for the fade drag: the clip's on-screen position, so the pointer
   // maps directly onto the fade length instead of accumulating deltas
   const fadeDragRef = useRef<{ leftPx: number; widthPx: number } | null>(null);
@@ -73,7 +76,24 @@ export default function ClipBlock({ clip }: Props) {
 
   // Handle pointer down for selection and drag
   const handlePointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
-    if (isTrimming) return;
+    if (isTrimming || isFading) return;
+    
+    // Check if Alt key is pressed to enter slip mode
+    if (e.altKey) {
+      // Store initial pointer position and buffer offset
+      dragStartRef.current = {
+        x: e.clientX,
+        y: e.clientY,
+        startBeat: clip.startBeat,
+        bufferOffsetBeats: clip.bufferOffsetBeats ?? 0,
+        durationBeats: clip.durationBeats,
+      };
+      setIsSlipping(true);
+      isDraggingRef.current = false;
+      (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+      e.stopPropagation();
+      return;
+    }
     
     // Store initial pointer position
     dragStartRef.current = {
@@ -93,7 +113,14 @@ export default function ClipBlock({ clip }: Props) {
 
   // Handle pointer move to detect drag threshold
   const handlePointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
-    if (!dragStartRef.current || isTrimming) return;
+    if (isTrimming || isFading || isSlipping) {
+      if (isSlipping) {
+        handleSlipMove(e);
+      }
+      return;
+    }
+    
+    if (!dragStartRef.current) return;
     
     const dx = Math.abs(e.clientX - dragStartRef.current.x);
     const dy = Math.abs(e.clientY - dragStartRef.current.y);
@@ -104,10 +131,31 @@ export default function ClipBlock({ clip }: Props) {
       isDraggingRef.current = true;
     }
   };
-
+  
+  // Handle slip move
+  const handleSlipMove = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (!isSlipping || !dragStartRef.current) return;
+    
+    const deltaPx = e.clientX - dragStartRef.current.x;
+    const deltaBeats = deltaPx / pixelsPerBeat;
+    
+    // Calculate new buffer offset
+    const newBufferOffset = dragStartRef.current.bufferOffsetBeats - deltaBeats;
+    
+    // Clamp to >= 0
+    const clampedBufferOffset = Math.max(0, newBufferOffset);
+    
+    // Update local preview
+    setSlipBufferOffsetBeats(clampedBufferOffset);
+  };
+  
   // Handle pointer up for selection
   const handlePointerUp = (e: React.PointerEvent<HTMLDivElement>) => {
     if (isTrimming) return;
+    if (isSlipping) {
+      handleSlipEnd(e);
+      return;
+    }
     
     // Only handle selection if we didn't drag
     if (!isDraggingRef.current && dragStartRef.current) {
@@ -119,6 +167,28 @@ export default function ClipBlock({ clip }: Props) {
     // Reset state
     dragStartRef.current = null;
     isDraggingRef.current = false;
+    
+    // Release pointer capture
+    (e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId);
+    
+    e.stopPropagation();
+  };
+  
+  // Handle slip end
+  const handleSlipEnd = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (!isSlipping || !dragStartRef.current) return;
+    
+    // Commit the slip to the store
+    const newBufferOffset = Math.round(slipBufferOffsetBeats * 1000) / 1000;
+    const originalBufferOffset = clip.bufferOffsetBeats ?? 0;
+    
+    if (newBufferOffset !== originalBufferOffset) {
+      slipClip(clip.trackId, clip.id, newBufferOffset);
+    }
+    
+    // Reset state
+    setIsSlipping(false);
+    dragStartRef.current = null;
     
     // Release pointer capture
     (e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId);
@@ -327,9 +397,9 @@ export default function ClipBlock({ clip }: Props) {
     (e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId);
   };
 
-  // Compute the effective clip properties for rendering (either the original or the trim-in-progress)
+  // Compute the effective clip properties for rendering (either the original or the trim/slip-in-progress)
   const effectiveStartBeat = isTrimming ? trimStartBeat : clip.startBeat;
-  const effectiveBufferOffsetBeats = isTrimming ? trimBufferOffsetBeats : (clip.bufferOffsetBeats ?? 0);
+  const effectiveBufferOffsetBeats = isSlipping ? slipBufferOffsetBeats : (isTrimming ? trimBufferOffsetBeats : (clip.bufferOffsetBeats ?? 0));
   const effectiveDurationBeats = isTrimming ? trimDurationBeats : clip.durationBeats;
   const effectiveWidth = Math.max(1, Math.round(effectiveDurationBeats * pixelsPerBeat));
 
@@ -356,18 +426,23 @@ export default function ClipBlock({ clip }: Props) {
     };
     
     drawWaveform(canvas, buffer, effectiveClip, bpm);
-  }, [clip.audioBufferId, clip.clipGain, clip.fadeInType, clip.fadeOutType, effectiveFadeIn, effectiveFadeOut, effectiveWidth, effectiveBufferOffsetBeats, effectiveDurationBeats, bpm, isTrimming]);
+  }, [clip.audioBufferId, clip.clipGain, clip.fadeInType, clip.fadeOutType, effectiveFadeIn, effectiveFadeOut, effectiveWidth, effectiveBufferOffsetBeats, effectiveDurationBeats, bpm, isTrimming, isSlipping]);
 
   return (
     <div
       className={`${styles.clip} ${isSelected ? styles.selected : ''} ${clip.muted ? styles.muted : ''}`} data-clip
-      style={{ left: effectiveStartBeat * pixelsPerBeat, width: effectiveWidth, background: clip.color }}
-      draggable={!isTrimming && !isFading}
-      onDragStart={isTrimming || isFading ? undefined : handleDragStart}
+      style={{ 
+        left: effectiveStartBeat * pixelsPerBeat, 
+        width: effectiveWidth, 
+        background: clip.color,
+        cursor: isSlipping ? 'ew-resize' : (e.altKey ? 'ew-resize' : undefined)
+      }}
+      draggable={!isTrimming && !isFading && !isSlipping}
+      onDragStart={isTrimming || isFading || isSlipping ? undefined : handleDragStart}
       onPointerDown={handlePointerDown}
-      onPointerMove={isTrimming ? handleTrimMove : handlePointerMove}
-      onPointerUp={isTrimming ? handleTrimEnd : handlePointerUp}
-      onPointerLeave={isTrimming ? handleTrimEnd : undefined}
+      onPointerMove={isTrimming ? handleTrimMove : isSlipping ? handleSlipMove : handlePointerMove}
+      onPointerUp={isTrimming ? handleTrimEnd : isSlipping ? handleSlipEnd : handlePointerUp}
+      onPointerLeave={isTrimming ? handleTrimEnd : isSlipping ? handleSlipEnd : undefined}
     >
       {/* Left trim handle */}
       <div
