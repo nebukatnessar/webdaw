@@ -1,14 +1,18 @@
 import { useEffect, useRef, useState } from 'react';
 import type { Clip, FadeType } from '../../types/daw';
-import { getBuffer } from '../../audio/engine';
+import { getBuffer, seekDuringPlayback } from '../../audio/engine';
 import { fadeCurveValueAt } from '../../audio/clip';
 import { usePixelsPerBeat } from '../../store/transportStore';
 import { useTransportStore } from '../../store/transportStore';
 import { useTrackStore } from '../../store/trackStore';
+import { TAKE_LANE_HEIGHT } from '../../audio/takes';
 import styles from './ClipBlock.module.css';
 
 interface Props {
   clip: Clip;
+  showTakeLanes?: boolean;
+  isActiveTake?: boolean;
+  isComped?: boolean;
 }
 
 // Minimum clip length in beats (matches the constant in trackStore.ts)
@@ -23,7 +27,7 @@ const DRAG_THRESHOLD = 4;
 // width regardless, so the cap only limits resolution of very zoomed-out clips.
 const MAX_CANVAS_WIDTH = 8192;
 
-export default function ClipBlock({ clip }: Props) {
+export default function ClipBlock({ clip, showTakeLanes = false, isActiveTake = false, isComped = false }: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const pixelsPerBeat = usePixelsPerBeat();
   const bpm = useTransportStore((s) => s.bpm);
@@ -168,6 +172,14 @@ export default function ClipBlock({ clip }: Props) {
       // Check if this is a shift+click for additive selection
       const additive = e.shiftKey;
       selectClip(clip.id, additive);
+      if (clip.takeGroupId && clip.takeNumber !== undefined) {
+        useTrackStore.getState().selectTake(clip.trackId, clip.takeGroupId, clip.takeNumber);
+        const transport = useTransportStore.getState();
+        if (transport.isPlaying) {
+          const tracks = useTrackStore.getState().tracks;
+          seekDuringPlayback(tracks, transport.playheadBeats, transport.bpm);
+        }
+      }
     }
     
     // Reset state
@@ -451,10 +463,12 @@ export default function ClipBlock({ clip }: Props) {
 
   return (
     <div
-      className={`${styles.clip} ${isSelected ? styles.selected : ''} ${clip.muted ? styles.muted : ''}`} data-clip
+      className={`${styles.clip} ${isSelected ? styles.selected : ''} ${clip.muted ? styles.muted : ''} ${isActiveTake ? styles.takeActive : ''} ${isComped ? styles.takeComped : ''}`} data-clip
       style={{ 
         left: effectiveStartBeat * pixelsPerBeat, 
         width: effectiveWidth, 
+        top: showTakeLanes && clip.takeGroupId ? 6 + ((clip.takeNumber ?? 1) - 1) * TAKE_LANE_HEIGHT : undefined,
+        height: showTakeLanes && clip.takeGroupId ? TAKE_LANE_HEIGHT - 4 : undefined,
         background: clip.color,
         cursor: isSlipping ? 'ew-resize' : undefined
       }}
@@ -497,7 +511,7 @@ export default function ClipBlock({ clip }: Props) {
         title={`Fade out (${fadeOutCurve}) - double-click to change shape`}
       />
       
-      <span className={styles.name}>{clip.name}</span>
+      <span className={styles.name}>{clip.takeNumber === undefined ? clip.name : `Take ${clip.takeNumber}`}</span>
       <canvas ref={canvasRef} className={styles.canvas} width={Math.min(effectiveWidth, MAX_CANVAS_WIDTH)} height={40} />
       {clip.clipGain !== undefined && clipGainDb !== 0 && (
         <span className={styles.gainBadge}>

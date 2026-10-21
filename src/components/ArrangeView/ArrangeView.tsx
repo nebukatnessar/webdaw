@@ -5,6 +5,7 @@ import useTrackStore, { type TrackState } from '../../store/trackStore';
 import { useTransportStore, usePixelsPerBeat } from '../../store/transportStore';
 import { BEATS_PER_BAR, MIN_TOTAL_BARS, TIMELINE_MARGIN_BARS } from '../../constants';
 import * as engine from '../../audio/engine';
+import { getActiveTakeNumber, getTrackDisplayHeight, groupTakes } from '../../audio/takes';
 import ClipBlock from './ClipBlock';
 import Ruler from './Ruler';
 
@@ -272,6 +273,22 @@ export default function ArrangeView({ scrollRef, onScroll }: Props) {
             {tracks.map((track, i) => {
               const isSelected = selectedTrackIds.includes(track.id);
               const isActive = activeTrackId === track.id;
+              const takeGroups = groupTakes(track.clips);
+              const activeTakeNumbers = new Map(
+                [...takeGroups].map(([groupId, takes]) => [groupId, getActiveTakeNumber(takes)]),
+              );
+              const compActiveGroups = new Set(
+                [...takeGroups]
+                  .filter(([, takes]) => takes.some((clip) => clip.comped) && !takes.some((clip) => clip.activeTake))
+                  .map(([groupId]) => groupId),
+              );
+              const visibleClips = track.showAllTakes
+                ? track.clips
+                : track.clips.filter((clip) =>
+                    !clip.takeGroupId || (compActiveGroups.has(clip.takeGroupId)
+                      ? clip.comped
+                      : clip.takeNumber === activeTakeNumbers.get(clip.takeGroupId)),
+                  );
               
               return (
                 <div
@@ -279,6 +296,7 @@ export default function ArrangeView({ scrollRef, onScroll }: Props) {
                   className={`${styles.lane} ${i % 2 === 1 ? styles.laneAlt : ''} $
                     ${dragOverTrackId === track.id ? styles.laneDropTarget : ''} $
                     ${isSelected ? styles.selected : ''} ${isActive ? styles.active : ''}`}
+                  style={{ height: getTrackDisplayHeight(track) }}
                   onClick={(e) => handleLaneClick(e, track.id)}
                   onDragOver={(e) => handleDragOver(e, track.id)}
                   onDragLeave={handleDragLeave}
@@ -287,8 +305,18 @@ export default function ArrangeView({ scrollRef, onScroll }: Props) {
                   aria-selected={isSelected}
                   aria-label={`Track ${track.name}`}
                 >
-                  {track.clips.map((clip) => (
-                    <ClipBlock key={clip.id} clip={clip} />
+                  {visibleClips.map((clip) => (
+                    <ClipBlock
+                      key={clip.id}
+                      clip={clip}
+                      showTakeLanes={!!track.showAllTakes}
+                      isActiveTake={clip.takeGroupId ? (
+                        compActiveGroups.has(clip.takeGroupId)
+                          ? !!clip.comped
+                          : clip.takeNumber === activeTakeNumbers.get(clip.takeGroupId)
+                      ) : false}
+                      isComped={!!clip.comped}
+                    />
                   ))}
                 </div>
               );

@@ -96,23 +96,15 @@
 
 .rowMain {
   display: flex;
-  flex-direction: column;
-  justify-content: center;
-  padding: 2px 8px; /* Increase horizontal padding for better grab area */
-  gap: 6px;
+  align-items: center;
+  gap: 4px;
+  padding: 0 4px 0 6px;
   flex: 1;
   min-width: 0;
 }
 
 .meterCol {
   flex-shrink: 0;
-}
-
-.rowTop {
-  display: flex;
-  align-items: center;
-  gap: 5px;
-  overflow: hidden;
 }
 
 .colorSwatch {
@@ -124,17 +116,166 @@
 
 .name {
   flex: 1;
+  min-width: 0;
+  height: 22px;
+  line-height: 20px;
+  padding: 0 6px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
   font-size: 12px;
   font-weight: 500;
+  background: var(--bg-0);
+  border: 1px solid var(--border);
+  border-radius: 3px;
 }
 
 .controls {
   display: flex;
   gap: 2px;
   flex-shrink: 0;
+  align-items: center;
+}
+
+.armBtn {
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  min-width: unset;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+}
+
+.armDot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--danger);
+  opacity: 0.6;
+}
+
+.armed .armDot {
+  background: #fff;
+  opacity: 1;
+}
+
+.knob {
+  position: relative;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  min-width: unset;
+  flex-shrink: 0;
+  border-radius: 50%;
+  border: 1px solid var(--border);
+  background: radial-gradient(circle at 35% 30%, var(--bg-hover), var(--bg-3) 60%, var(--bg-1));
+  cursor: ns-resize;
+  touch-action: none;
+}
+
+.knobIndicator {
+  position: absolute;
+  top: 2px;
+  left: 50%;
+  width: 2px;
+  height: 7px;
+  margin-left: -1px;
+  border-radius: 1px;
+  background: var(--text);
+  transform-origin: 50% 7px; /* knob centre: 9px inner radius - 2px top */
+  pointer-events: none;
+}
+
+.trackMenu {
+  flex-shrink: 0;
+}
+
+.menuBtn {
+  position: relative;
+  width: 22px;
+  height: 20px;
+  padding: 0;
+  min-width: unset;
+  font-size: 10px;
+  border-radius: 2px;
+}
+
+.menuBtnOpen {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+/* Marks tracks whose options differ from the default (multi-take recording). */
+.menuBadge {
+  position: absolute;
+  top: -4px;
+  right: -4px;
+  width: 10px;
+  height: 10px;
+  line-height: 10px;
+  border-radius: 50%;
+  font-size: 7px;
+  font-weight: bold;
+  background: var(--accent);
+  color: #fff;
+}
+
+.trackMenuPanel {
+  position: fixed;
+  z-index: 30;
+  width: 200px;
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--bg-2);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.35);
+  cursor: default;
+}
+
+.menuField,
+.menuCheck {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text);
+  font-size: 10px;
+}
+
+.menuField {
+  justify-content: space-between;
+}
+
+.menuField select {
+  width: 90px;
+  min-width: 0;
+  font-size: 10px;
+}
+
+.trackMenuPanel button {
+  width: 100%;
+  min-height: 24px;
+  font-size: 10px;
+}
+
+.menuSeparator {
+  height: 1px;
+  background: var(--border);
+}
+
+.trackMenuPanel .menuDanger:not(:disabled):hover {
+  color: var(--danger);
+  border-color: var(--danger);
+}
+
+.trackMenuPanel button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
 }
 
 .iconBtn {
@@ -161,64 +302,11 @@
 .armed {
   background: var(--danger);
   border-color: var(--danger);
-  color: #fff;
 }
 
 .armed:hover {
   background: var(--danger);
   filter: brightness(1.1);
-}
-
-.removeBtn {
-  width: 20px;
-  height: 20px;
-  padding: 0;
-  font-size: 11px;
-  min-width: unset;
-  border-radius: 2px;
-  color: var(--text-dim);
-  border-color: transparent;
-  background: transparent;
-}
-
-.removeBtn:hover {
-  color: var(--danger);
-  border-color: var(--danger);
-  background: transparent;
-}
-
-.removeBtn:disabled {
-  opacity: 0.3;
-  cursor: not-allowed;
-}
-
-.disabled {
-  opacity: 0.3;
-  cursor: not-allowed;
-}
-
-.volume {
-  width: 100%;
-  height: 10px;
-}
-
-.panRow {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-
-.pan {
-  flex: 1;
-  height: 10px;
-}
-
-.panValue {
-  width: 22px;
-  flex-shrink: 0;
-  text-align: right;
-  font-size: 10px;
-  color: var(--text-dim);
 }
 
 .empty {

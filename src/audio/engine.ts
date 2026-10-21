@@ -1,4 +1,5 @@
 import type { Track, MasterEffects } from '../types/daw';
+import { getAudibleClips } from './takes';
 import { cacheBuffer } from './bufferCache';
 import useTrackStore from '../store/trackStore';
 import type { TrackState } from '../store/trackStore';
@@ -292,7 +293,7 @@ function applyLiveClipGain(tracks: Track[]): void {
   if (activeClipGainNodes.size === 0) return;
   const ctx = getAudioContext();
   for (const track of tracks) {
-    for (const clip of track.clips) {
+    for (const clip of getAudibleClips(track.clips)) {
       const sources = activeClipGainNodes.get(clip.id);
       if (!sources) continue;
       for (const source of sources) {

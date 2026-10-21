@@ -3,6 +3,7 @@ import { encodeWav } from './wav';
 import type { CompressorSettings, GateSettings, Track, Project } from '../types/daw';
 import { createAndConfigureCompressor, getDefaultCompressorSettings } from './compressor';
 import { createAndConfigureGate, getDefaultGateSettings } from './gate';
+import { getAudibleClips } from './takes';
 
 export interface ExportOptions {
   sampleRate?: number;
@@ -37,15 +38,14 @@ export async function exportTrackAsWAV(
 ): Promise<ExportResult> {
   const { sampleRate = 44100 } = options;
   
-  const sortedClips = [...track.clips].sort((a, b) => a.startBeat - b.startBeat);
+  const sortedClips = getAudibleClips(track.clips).sort((a, b) => a.startBeat - b.startBeat);
   
   if (sortedClips.length === 0) {
     throw new Error('No clips to export');
   }
   
   const beatsToSecs = 60 / bpm;
-  const lastClip = sortedClips[sortedClips.length - 1];
-  const endBeat = lastClip.startBeat + lastClip.durationBeats;
+  const endBeat = Math.max(...sortedClips.map((clip) => clip.startBeat + clip.durationBeats));
   const totalDurationSecs = endBeat * beatsToSecs;
   
   const offlineCtx = new OfflineAudioContext(
@@ -96,7 +96,9 @@ export async function exportTrackAsWAV(
     
     currentNode.connect(gainNode);
     
-    source.start(clipStartSecs);
+    const offsetSecs = (clip.bufferOffsetBeats ?? 0) * beatsToSecs;
+    const durationSecs = Math.min(buffer.duration - offsetSecs, clip.durationBeats * beatsToSecs);
+    if (durationSecs > 0) source.start(clipStartSecs, offsetSecs, durationSecs);
   }
   
   const renderedBuffer = await offlineCtx.startRendering();
@@ -172,8 +174,7 @@ export async function exportProjectAsWAV(
     
     currentNode.connect(trackGain);
     
-    const sortedClips = [...track.clips].sort((a, b) => a.startBeat - b.startBeat);
-    for (const clip of sortedClips) {
+    for (const clip of getAudibleClips(track.clips).sort((a, b) => a.startBeat - b.startBeat)) {
       if (!clip.audioBufferId) continue;
       const buffer = getBuffer(clip.audioBufferId);
       if (!buffer) continue;
@@ -183,7 +184,9 @@ export async function exportProjectAsWAV(
       const source = offlineCtx.createBufferSource();
       source.buffer = buffer;
       source.connect(panner);
-      source.start(clipStartSecs);
+      const offsetSecs = (clip.bufferOffsetBeats ?? 0) * beatsToSecs;
+      const durationSecs = Math.min(buffer.duration - offsetSecs, clip.durationBeats * beatsToSecs);
+      if (durationSecs > 0) source.start(clipStartSecs, offsetSecs, durationSecs);
     }
   }
   

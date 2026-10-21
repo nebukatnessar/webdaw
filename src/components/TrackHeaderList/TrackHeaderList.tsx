@@ -1,11 +1,14 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import type { RefObject } from 'react';
 import styles from './TrackHeaderList.module.css';
 import { useTrackStore } from '../../store/trackStore';
+import { useRecordingStore } from '../../store/recordingStore';
 import { useTransportStore } from '../../store/transportStore';
+import { getActiveTakeNumber, getTrackDisplayHeight, groupTakes } from '../../audio/takes';
 import * as engine from '../../audio/engine';
 import { BEATS_PER_BAR } from '../../constants';
 import TrackMeter from './TrackMeter';
+import Knob from './Knob';
 import EffectsDialog from '../EffectsDialog/EffectsDialog';
 
 interface Props {
@@ -20,7 +23,16 @@ function formatPan(pan: number): string {
 }
 
 export default function TrackHeaderList({ scrollRef, onScroll }: Props) {
-  const { tracks, updateTrack, selectedTrackIds, activeTrackId, selectTrack } = useTrackStore();
+  const { tracks, updateTrack, selectedTrackIds, selectedClipIds, activeTrackId, selectTrack } = useTrackStore();
+  const selectTake = useTrackStore((s) => s.selectTake);
+  const createTakeComp = useTrackStore((s) => s.createTakeComp);
+  const playTakeComp = useTrackStore((s) => s.playTakeComp);
+  const toggleTakeLanes = useTrackStore((s) => s.toggleTakeLanes);
+  const explodeTakeGroup = useTrackStore((s) => s.explodeTakeGroup);
+  const isRecording = useRecordingStore((s) => s.isRecording);
+  const isMultiTakeRecording = isRecording && tracks.some(
+    (track) => track.armed && track.recordingMode === 'multiTake',
+  );
   const reorderTrack = useTrackStore((s) => s.reorderTrack);
   const createTracksForClips = useTrackStore((s) => s.createTracksForClips);
   const toggleArmSelected = useTrackStore((s) => s.toggleArmSelected);
@@ -34,6 +46,8 @@ export default function TrackHeaderList({ scrollRef, onScroll }: Props) {
   const [dragStartY, setDragStartY] = useState<number | null>(null);
   const [rowDraggable, setRowDraggable] = useState(true);
   const DRAG_THRESHOLD = 15; // Pixels to distinguish intentional drags
+
+  const [openMenu, setOpenMenu] = useState<{ trackId: string; top: number; left: number } | null>(null);
 
   // State for EffectsDialog
   const [openDialogTrackId, setOpenDialogTrackId] = useState<string | null>(null);
@@ -152,6 +166,33 @@ export default function TrackHeaderList({ scrollRef, onScroll }: Props) {
     }
   };
 
+  // Track options menu. The panel is position: fixed so the scroll container
+  // can't clip it; it closes on outside clicks and when the list scrolls.
+  const toggleTrackMenu = (e: React.MouseEvent<HTMLButtonElement>, trackId: string) => {
+    e.stopPropagation();
+    const rect = e.currentTarget.getBoundingClientRect();
+    setOpenMenu((prev) => (prev?.trackId === trackId ? null : { trackId, top: rect.bottom + 3, left: rect.left }));
+  };
+
+  useEffect(() => {
+    if (!openMenu) return;
+    const close = (e: Event) => {
+      if (e.target instanceof Element && e.target.closest('[data-track-menu]')) return;
+      setOpenMenu(null);
+    };
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setOpenMenu(null);
+    };
+    document.addEventListener('pointerdown', close);
+    document.addEventListener('scroll', close, true);
+    document.addEventListener('keydown', onKeyDown);
+    return () => {
+      document.removeEventListener('pointerdown', close);
+      document.removeEventListener('scroll', close, true);
+      document.removeEventListener('keydown', onKeyDown);
+    };
+  }, [openMenu]);
+
   // Toggle EffectsDialog for a track
   const toggleEffectsDialog = (e: React.MouseEvent, trackId: string) => {
     e.stopPropagation(); // Prevent row click from triggering
@@ -188,11 +229,24 @@ export default function TrackHeaderList({ scrollRef, onScroll }: Props) {
         {tracks.map((track) => {
           const isSelected = selectedTrackIds.includes(track.id);
           const isActive = activeTrackId === track.id;
+          const takeGroups = [...groupTakes(track.clips).entries()]
+            .sort(([, first], [, second]) =>
+              Math.max(...first.map((clip) => clip.startBeat)) - Math.max(...second.map((clip) => clip.startBeat)),
+            );
+          const [takeGroupId, takes] = takeGroups[takeGroups.length - 1] ?? [];
+          const takeNumbers = takes
+            ? [...new Set(takes.map((clip) => clip.takeNumber ?? 0))].sort((a, b) => a - b)
+            : [];
+          const activeTakeNumber = takes ? getActiveTakeNumber(takes) : 0;
+          const hasComp = !!takes?.some((clip) => clip.comped);
+          const compIsActive = hasComp && !takes?.some((clip) => clip.activeTake);
+          const canCreateComp = !!takes?.some((clip) => selectedClipIds.includes(clip.id));
           
           return (
             <div
               key={track.id}
               className={`${styles.row} ${isSelected ? styles.selected : ''} ${isActive ? styles.active : ''} ${dragOverTrackId === track.id ? styles.rowDropTarget : ''} ${draggedTrackId === track.id ? styles.rowDragging : ''}`}
+              style={{ height: getTrackDisplayHeight(track) }}
               onClick={(e) => handleRowClick(e, track.id)}
               draggable={rowDraggable}
               onDragStart={(e) => handleDragStart(e, track.id)}
@@ -205,23 +259,152 @@ export default function TrackHeaderList({ scrollRef, onScroll }: Props) {
               aria-label={`Track ${track.name}`}
             >
               <div className={styles.rowMain}>
-                <div className={styles.rowTop}>
-                  <span className={styles.colorSwatch} style={{ background: track.color }} />
-                  <span className={styles.name} title={track.name}>
-                    {track.name}
-                  </span>
-                  <div className={styles.controls}>
-                    <button
-                      className={`${styles.iconBtn} ${track.armed ? styles.armed : ''}`}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        toggleArmSelected();
-                      }}
-                      title="Arm for recording"
-                      aria-label="Arm selected tracks for recording"
+                <span className={styles.colorSwatch} style={{ background: track.color }} />
+                <button
+                  className={`${styles.armBtn} ${track.armed ? styles.armed : ''}`}
+                  disabled={isMultiTakeRecording}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    toggleArmSelected();
+                  }}
+                  title="Arm for recording"
+                  aria-label="Arm selected tracks for recording"
+                >
+                  <span className={styles.armDot} />
+                </button>
+                <span className={styles.name} title={track.name}>
+                  {track.name}
+                </span>
+                <Knob
+                  value={track.volume}
+                  min={0}
+                  max={1}
+                  defaultValue={1}
+                  label={`Volume for ${track.name}`}
+                  formatValue={(v) => `${Math.round(v * 100)}%`}
+                  onChange={(volume) => updateTrack(track.id, { volume })}
+                  onDragStateChange={(dragging) => setRowDraggable(!dragging)}
+                />
+                <div className={styles.trackMenu} data-track-menu>
+                  <button
+                    type="button"
+                    className={`${styles.menuBtn} ${openMenu?.trackId === track.id ? styles.menuBtnOpen : ''}`}
+                    onClick={(e) => toggleTrackMenu(e, track.id)}
+                    title="Track options"
+                    aria-label={`Track options for ${track.name}`}
+                    aria-haspopup="menu"
+                    aria-expanded={openMenu?.trackId === track.id}
+                  >
+                    {track.recordingMode === 'multiTake' && <span className={styles.menuBadge}>T</span>}
+                    ▾
+                  </button>
+                  {openMenu?.trackId === track.id && (
+                    <div
+                      className={styles.trackMenuPanel}
+                      style={{ top: openMenu.top, left: openMenu.left }}
+                      onClick={(e) => e.stopPropagation()}
                     >
-                      ⏺
-                    </button>
+                      <label className={styles.menuField}>
+                        Recording mode
+                        <select
+                          value={track.recordingMode ?? 'layered'}
+                          disabled={isRecording}
+                          onChange={(e) => updateTrack(track.id, { recordingMode: e.target.value as 'layered' | 'multiTake' })}
+                          aria-label={`Recording mode for ${track.name}`}
+                        >
+                          <option value="layered">Layered</option>
+                          <option value="multiTake">Multi-Take</option>
+                        </select>
+                      </label>
+                      {takeGroupId && takes && (
+                        <>
+                          <div className={styles.menuSeparator} />
+                          <label className={styles.menuCheck}>
+                            <input
+                              type="checkbox"
+                              checked={!!track.showAllTakes}
+                              onChange={() => toggleTakeLanes(track.id)}
+                            />
+                            Show all takes
+                          </label>
+                          <label className={styles.menuField}>
+                            Active take
+                            <select
+                              value={compIsActive ? 'comp' : String(activeTakeNumber)}
+                              onChange={(e) => {
+                                if (e.target.value === 'comp') playTakeComp(track.id, takeGroupId);
+                                else selectTake(track.id, takeGroupId, Number(e.target.value));
+                                const transport = useTransportStore.getState();
+                                if (transport.isPlaying) {
+                                  engine.seekDuringPlayback(
+                                    useTrackStore.getState().tracks,
+                                    transport.playheadBeats,
+                                    transport.bpm,
+                                  );
+                                }
+                              }}
+                              aria-label={`Active take for ${track.name}`}
+                            >
+                              {hasComp && <option value="comp">Comp</option>}
+                              {takeNumbers.map((takeNumber) => (
+                                <option key={takeNumber} value={takeNumber}>Take {takeNumber}</option>
+                              ))}
+                            </select>
+                          </label>
+                          <button
+                            type="button"
+                            disabled={!canCreateComp}
+                            onClick={() => {
+                              createTakeComp(track.id, takeGroupId);
+                              const transport = useTransportStore.getState();
+                              if (transport.isPlaying) {
+                                engine.seekDuringPlayback(
+                                  useTrackStore.getState().tracks,
+                                  transport.playheadBeats,
+                                  transport.bpm,
+                                );
+                              }
+                            }}
+                            title="Use selected take segments as the comp"
+                          >
+                            Create comp from selected segments
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => explodeTakeGroup(track.id, takeGroupId)}
+                            title="Create one new track for each take"
+                          >
+                            Explode takes to tracks
+                          </button>
+                        </>
+                      )}
+                      <div className={styles.menuSeparator} />
+                      <button
+                        type="button"
+                        className={styles.menuDanger}
+                        onClick={() => {
+                          setOpenMenu(null);
+                          deleteSelectedTracks();
+                        }}
+                        disabled={selectedTrackIds.length === 0}
+                        title="Remove the selected tracks"
+                      >
+                        Remove selected tracks
+                      </button>
+                    </div>
+                  )}
+                </div>
+                <Knob
+                  value={track.pan}
+                  min={-1}
+                  max={1}
+                  defaultValue={0}
+                  label={`Pan for ${track.name}`}
+                  formatValue={formatPan}
+                  onChange={(pan) => updateTrack(track.id, { pan })}
+                  onDragStateChange={(dragging) => setRowDraggable(!dragging)}
+                />
+                <div className={styles.controls}>
                     <button
                       className={`${styles.iconBtn} ${track.muted ? styles.toggled : ''}`}
                       onClick={(e) => {
@@ -251,48 +434,6 @@ export default function TrackHeaderList({ scrollRef, onScroll }: Props) {
                     >
                       FX
                     </button>
-                    <button
-                      className={`${styles.removeBtn} ${selectedTrackIds.length === 0 ? styles.disabled : ''}`}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        deleteSelectedTracks();
-                      }}
-                      title="Remove track"
-                      aria-label="Remove selected tracks"
-                      disabled={selectedTrackIds.length === 0}
-                    >
-                      ✕
-                    </button>
-                  </div>
-                </div>
-                <input
-                  type="range"
-                  min={0}
-                  max={1}
-                  step={0.01}
-                  value={track.volume}
-                  onChange={(e) => updateTrack(track.id, { volume: Number(e.target.value) })}
-                  onMouseDown={(e) => { e.stopPropagation(); setRowDraggable(false); }}
-                  onTouchStart={(e) => { e.stopPropagation(); setRowDraggable(false); }}
-                  title={`Volume: ${Math.round(track.volume * 100)}%`}
-                  className={styles.volume}
-                  aria-label={`Volume for ${track.name}`}
-                />
-                <div className={styles.panRow}>
-                  <input
-                    type="range"
-                    min={-1}
-                    max={1}
-                    step={0.01}
-                    value={track.pan}
-                    onChange={(e) => updateTrack(track.id, { pan: Number(e.target.value) })}
-                    onMouseDown={(e) => { e.stopPropagation(); setRowDraggable(false); }}
-                    onTouchStart={(e) => { e.stopPropagation(); setRowDraggable(false); }}
-                    title={`Pan: ${formatPan(track.pan)}`}
-                    className={styles.pan}
-                    aria-label={`Pan for ${track.name}`}
-                  />
-                  <span className={styles.panValue}>{formatPan(track.pan)}</span>
                 </div>
               </div>
               <TrackMeter trackId={track.id} trackName={track.name} />

@@ -14,6 +14,10 @@ export interface Clip {
   fadeOutDuration?: number; // Fade-out length in beats (0 or undefined = no fade)
   fadeInType?: FadeType; // Fade-in curve shape (default: 'exponential'; double-click the fade-in handle to cycle shapes)
   fadeOutType?: FadeType; // Fade-out curve shape (default: 'exponential'; double-click the fade-out handle to cycle shapes)
+  takeGroupId?: string;
+  takeNumber?: number;
+  activeTake?: boolean;
+  comped?: boolean;
 }
 
 // Fade curve shapes. 'exponential' swells in quickly and releases with an
@@ -103,6 +107,8 @@ export interface Track {
   muted: boolean;
   soloed: boolean;
   armed: boolean;
+  recordingMode?: 'layered' | 'multiTake';
+  showAllTakes?: boolean;
   volume: number; // 0–1
   pan: number;    // -1 to 1
   color: string;

@@ -3,6 +3,7 @@ import type { RefObject } from 'react';
 import styles from './ArrangeView.module.css';
 import { useTransportStore } from '../../store/transportStore';
 import { useTrackStore } from '../../store/trackStore';
+import { useRecordingStore } from '../../store/recordingStore';
 import { BEATS_PER_BAR } from '../../constants';
 import * as engine from '../../audio/engine';
 
@@ -18,6 +19,11 @@ export default function Ruler({ scrollRef, pixelsPerBeat, totalBars }: Props) {
   const setSelection = useTransportStore((s) => s.setSelection);
   const clearSelection = useTransportStore((s) => s.clearSelection);
   const gridDivisionBeats = useTransportStore((s) => s.gridDivisionBeats);
+  const isRecording = useRecordingStore((s) => s.isRecording);
+  const tracks = useTrackStore((s) => s.tracks);
+  const isMultiTakeRecording = isRecording && tracks.some(
+    (track) => track.armed && track.recordingMode === 'multiTake',
+  );
 
   // Relocating the playhead used to always pause playback. Instead, if
   // something's already playing, reschedule from the new position so
@@ -48,6 +54,7 @@ export default function Ruler({ scrollRef, pixelsPerBeat, totalBars }: Props) {
   }, [scrollRef, pixelsPerBeat]);
 
   const handleMouseDown = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
+    if (isMultiTakeRecording) return;
     const beat = getBeatFromClientX(e.clientX);
     const snappedBeat = Math.round(beat);
 
@@ -62,7 +69,7 @@ export default function Ruler({ scrollRef, pixelsPerBeat, totalBars }: Props) {
     // Don't create selection yet - wait for actual drag movement
 
     e.preventDefault();
-  }, [getBeatFromClientX, relocatePlayhead]);
+  }, [getBeatFromClientX, isMultiTakeRecording, relocatePlayhead]);
 
   const handleMouseMove = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
     if (!isDragging) return;
@@ -131,6 +138,7 @@ export default function Ruler({ scrollRef, pixelsPerBeat, totalBars }: Props) {
   }, [isDragging, clearSelection]);
 
   const handleRulerClick = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
+    if (isMultiTakeRecording) return;
     // Skip if this click was part of a drag operation
     if (justDraggedRef.current) {
       justDraggedRef.current = false;
@@ -144,7 +152,7 @@ export default function Ruler({ scrollRef, pixelsPerBeat, totalBars }: Props) {
     const snappedBeat = Math.max(0, Math.round(rawBeat));
     relocatePlayhead(snappedBeat);
     // Don't create or clear selection on simple click
-  }, [scrollRef, pixelsPerBeat, relocatePlayhead]);
+  }, [isMultiTakeRecording, scrollRef, pixelsPerBeat, relocatePlayhead]);
 
   // Compute the width of a bar in pixels
   const barWidth = BEATS_PER_BAR * pixelsPerBeat;
@@ -160,7 +168,7 @@ export default function Ruler({ scrollRef, pixelsPerBeat, totalBars }: Props) {
       onMouseMove={handleMouseMove}
       onMouseUp={handleMouseUp}
       onMouseLeave={handleMouseLeave}
-      style={{ cursor: isDragging ? 'ew-resize' : 'pointer' }}
+      style={{ cursor: isMultiTakeRecording ? 'not-allowed' : isDragging ? 'ew-resize' : 'pointer' }}
     >
       {/* Bar labels */}
       {bars.map((bar) => (

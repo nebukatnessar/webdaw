@@ -6,6 +6,7 @@ import { useProjectStore } from '../../store/projectStore';
 import { useRecordingStore } from '../../store/recordingStore';
 import * as engine from '../../audio/engine';
 import * as recording from '../../audio/recording';
+import { groupTakes } from '../../audio/takes';
 import ExportDialog from '../ExportDialog/ExportDialog';
 import ProjectDialog from '../ProjectDialog/ProjectDialog';
 import { toggleTheme, setHighContrast, isHighContrast, getTheme } from '../../utils/theme';
@@ -17,6 +18,7 @@ export default function TransportBar() {
   const tracks = useTrackStore((s) => s.tracks);
   const addTrack = useTrackStore((s) => s.addTrack);
   const addClip = useTrackStore((s) => s.addClip);
+  const addRecordedTakes = useTrackStore((s) => s.addRecordedTakes);
 
   const projectStore = useProjectStore();
 
@@ -47,6 +49,15 @@ export default function TransportBar() {
   bpmRef.current = bpm;
   const lastBpmRef = useRef(bpm);
   const recordStartBeatRef = useRef(0);
+  const takeRecordingRef = useRef<{
+    startBeat: number;
+    selectionEndBeat: number | null;
+    bpm: number;
+    takeDurationSecs: number | null;
+    loop: boolean;
+    takeGroupIds: Record<string, string>;
+    nextTakeNumbers: Record<string, number>;
+  } | null>(null);
 
   // Update theme state when theme changes
   useEffect(() => {
@@ -86,22 +97,52 @@ export default function TransportBar() {
   };
 
   const finishRecording = async () => {
+    const takeRecording = takeRecordingRef.current;
+    takeRecordingRef.current = null;
     const buffer = await recording.stopRecording();
     setIsRecording(false);
     if (!buffer) return;
 
-    const durationBeats = (buffer.duration * bpmRef.current) / 60;
-    const bufferId = `buf-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-    engine.storeBuffer(bufferId, buffer);
-    for (const track of useTrackStore.getState().tracks) {
-      if (track.armed) {
+    const armedTracks = useTrackStore.getState().tracks.filter((track) => track.armed);
+    const multiTakeTracks = takeRecording
+      ? armedTracks.filter((track) => track.recordingMode === 'multiTake' && takeRecording.takeGroupIds[track.id])
+      : [];
+    const layeredTracks = armedTracks.filter((track) => !multiTakeTracks.includes(track));
+
+    if (layeredTracks.length > 0) {
+      const durationBeats = (buffer.duration * bpmRef.current) / 60;
+      const bufferId = `buf-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+      engine.storeBuffer(bufferId, buffer);
+      for (const track of layeredTracks) {
         addClip(track.id, recordStartBeatRef.current, durationBeats, 'Recording', bufferId);
       }
+    }
+
+    if (takeRecording && multiTakeTracks.length > 0) {
+      const takes = takeRecording.loop && takeRecording.takeDurationSecs
+        ? recording.splitRecordingIntoTakes(buffer, takeRecording.takeDurationSecs)
+        : [buffer];
+      const takeBufferIds = takes.map((take) => {
+        const bufferId = `buf-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+        engine.storeBuffer(bufferId, take);
+        return bufferId;
+      });
+      addRecordedTakes(multiTakeTracks.map((track) => ({
+        trackId: track.id,
+        clips: takes.map((take, index) => ({
+          startBeat: takeRecording.startBeat,
+          durationBeats: (take.duration * takeRecording.bpm) / 60,
+          audioBufferId: takeBufferIds[index],
+          takeGroupId: takeRecording.takeGroupIds[track.id],
+          takeNumber: (takeRecording.nextTakeNumbers[track.id] ?? 1) + index,
+          name: `Take ${(takeRecording.nextTakeNumbers[track.id] ?? 1) + index}`,
+        })),
+      })));
     }
   };
 
   const armedTracks = tracks.filter((t) => t.armed);
-  const canRecord = armedTracks.length > 0 && !!selectedDeviceId;
+  const canRecord = armedTracks.length > 0;
 
   const handleRecordToggle = () => {
     if (isRecording) {
@@ -115,6 +156,10 @@ export default function TransportBar() {
       return;
     }
     if (!canRecord) return;
+    if (!selectedDeviceId && !permissionGranted) {
+      handleRequestMicPermission();
+      return;
+    }
 
     const beginRecording = async () => {
       await engine.resumeContext();
@@ -124,12 +169,98 @@ export default function TransportBar() {
         setIsCountingIn(false);
         if (!completed) return;
       }
-      recordStartBeatRef.current = useTransportStore.getState().playheadBeats;
-      if (!useTransportStore.getState().isPlaying) {
-        handlePlayPause();
+
+      await recording.prepareRecording(selectedDeviceId);
+      const transport = useTransportStore.getState();
+      const currentTracks = useTrackStore.getState().tracks;
+      const currentArmedTracks = currentTracks.filter((track) => track.armed);
+      const currentHasMultiTake = currentArmedTracks.some((track) => track.recordingMode === 'multiTake');
+      const selectionStartBeat = transport.selectionStart;
+      const selectionEndBeat = transport.selectionEnd;
+      const hasTakeLoop = transport.isRepeat && selectionStartBeat !== null &&
+        selectionEndBeat !== null && selectionEndBeat > selectionStartBeat;
+      const takeStartBeat = currentHasMultiTake && hasTakeLoop && selectionStartBeat !== null
+        ? selectionStartBeat
+        : transport.playheadBeats;
+      recordStartBeatRef.current = takeStartBeat;
+      if (currentHasMultiTake) {
+        const takeBpm = bpmRef.current;
+        const groupStartBeat = hasTakeLoop && selectionStartBeat !== null ? selectionStartBeat : takeStartBeat;
+        const groupEndBeat = hasTakeLoop && selectionEndBeat !== null ? selectionEndBeat : takeStartBeat;
+        const multiTakeTrackIds = currentArmedTracks
+          .filter((track) => track.recordingMode === 'multiTake')
+          .map((track) => track.id);
+        const selectedClipIds = new Set(useTrackStore.getState().selectedClipIds);
+        const sessionId = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+        const takeGroupIds: Record<string, string> = {};
+        const baseTakeNumbers: Record<string, number> = {};
+        for (const trackId of multiTakeTrackIds) {
+          const track = currentArmedTracks.find((item) => item.id === trackId);
+          if (!track) continue;
+          const overlappingGroups = [...groupTakes(track.clips).entries()]
+            .filter(([, takes]) => takes.some((clip) => hasTakeLoop
+              ? clip.startBeat < groupEndBeat && clip.startBeat + clip.durationBeats > groupStartBeat
+              : clip.startBeat <= groupStartBeat && clip.startBeat + clip.durationBeats > groupStartBeat,
+            ))
+            .sort(([, first], [, second]) =>
+              Math.max(...first.map((clip) => clip.startBeat)) - Math.max(...second.map((clip) => clip.startBeat)),
+            );
+          const selectedGroup = overlappingGroups.find(([, takes]) =>
+            takes.some((clip) => selectedClipIds.has(clip.id)),
+          );
+          const existingGroup = selectedGroup ?? overlappingGroups[overlappingGroups.length - 1];
+          const groupId = existingGroup?.[0] ?? `take-group-${sessionId}-${trackId}`;
+          takeGroupIds[trackId] = groupId;
+          baseTakeNumbers[trackId] = existingGroup
+            ? Math.max(...existingGroup[1].map((clip) => clip.takeNumber ?? 0))
+            : 0;
+        }
+        if (hasTakeLoop && selectionStartBeat !== null && selectionEndBeat !== null) {
+          useTrackStore.getState().prepareTakeGroup(
+            multiTakeTrackIds,
+            selectionStartBeat,
+            selectionEndBeat,
+            takeGroupIds,
+            baseTakeNumbers,
+          );
+        }
+        const preparedTracks = useTrackStore.getState().tracks;
+        const nextTakeNumbers = Object.fromEntries(multiTakeTrackIds.map((trackId) => {
+          const track = preparedTracks.find((item) => item.id === trackId);
+          const groupNumbers = track?.clips
+            .filter((clip) => clip.takeGroupId === takeGroupIds[trackId])
+            .map((clip) => clip.takeNumber ?? 0) ?? [];
+          return [trackId, Math.max(0, ...groupNumbers) + 1];
+        }));
+        takeRecordingRef.current = {
+          startBeat: takeStartBeat,
+          selectionEndBeat: hasTakeLoop ? selectionEndBeat : null,
+          bpm: takeBpm,
+          takeDurationSecs: hasTakeLoop && selectionStartBeat !== null && selectionEndBeat !== null
+            ? ((selectionEndBeat - selectionStartBeat) * 60) / takeBpm
+            : null,
+          loop: hasTakeLoop,
+          takeGroupIds,
+          nextTakeNumbers,
+        };
+      } else {
+        takeRecordingRef.current = null;
       }
-      await recording.startRecording(selectedDeviceId);
+
+      const preparedTracks = useTrackStore.getState().tracks;
+      if (transport.isPlaying) {
+        if (currentHasMultiTake) {
+          engine.seekDuringPlayback(preparedTracks, takeStartBeat, bpmRef.current);
+          setPlayheadBeats(takeStartBeat);
+        }
+      }
+      recording.startRecording();
       setIsRecording(true);
+      if (!transport.isPlaying) {
+        setPlayheadBeats(takeStartBeat);
+        engine.startPlaybackAt(preparedTracks, takeStartBeat, bpmRef.current);
+        play();
+      }
     };
     void beginRecording();
   };
@@ -203,6 +334,25 @@ export default function TransportBar() {
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       const mod = e.ctrlKey || e.metaKey;
+      const target = e.target as HTMLElement | null;
+      const isTyping = !!target && (
+        target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' ||
+        target.tagName === 'SELECT' || target.isContentEditable
+      );
+
+      if (!mod && e.key.toLowerCase() === 't' && !isTyping) {
+        const trackStore = useTrackStore.getState();
+        if (trackStore.activeTrackId) {
+          e.preventDefault();
+          trackStore.cycleTake(trackStore.activeTrackId, e.shiftKey ? -1 : 1);
+          const transport = useTransportStore.getState();
+          if (transport.isPlaying) {
+            engine.seekDuringPlayback(useTrackStore.getState().tracks, transport.playheadBeats, transport.bpm);
+          }
+        }
+        return;
+      }
+
       if (mod && e.key.toLowerCase() === 'n') {
         e.preventDefault();
         setShowProjectDialog('new');
@@ -219,9 +369,6 @@ export default function TransportBar() {
         return;
       }
       if (e.code === 'Space') {
-        const target = e.target as HTMLElement | null;
-        const isTyping =
-          !!target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable);
         if (isTyping) return;
         e.preventDefault();
         handlePlayPause();
@@ -249,10 +396,14 @@ export default function TransportBar() {
     const tick = () => {
       let newPlayhead = engine.computePlayheadBeats(bpmRef.current);
 
-      if (isRepeat && selectionStart !== null && selectionEnd !== null) {
-        if (newPlayhead >= selectionEnd) {
-          const loopDuration = selectionEnd - selectionStart;
-          newPlayhead = selectionStart + ((newPlayhead - selectionStart) % loopDuration);
+      const takeLoop = takeRecordingRef.current;
+      const shouldRepeat = takeLoop ? takeLoop.loop : isRepeat;
+      const loopStart = takeLoop?.loop ? takeLoop.startBeat : selectionStart;
+      const loopEnd = takeLoop?.loop ? takeLoop.selectionEndBeat : selectionEnd;
+      if (shouldRepeat && loopStart !== null && loopEnd !== null && loopEnd > loopStart) {
+        if (newPlayhead >= loopEnd) {
+          const loopDuration = loopEnd - loopStart;
+          newPlayhead = loopStart + ((newPlayhead - loopStart) % loopDuration);
           engine.seekDuringPlayback(useTrackStore.getState().tracks, newPlayhead, bpmRef.current);
         }
       }
@@ -351,6 +502,7 @@ export default function TransportBar() {
         <button
           className={styles.btn + ' ' + (isRepeat ? styles.active : '')}
           onClick={toggleRepeat}
+          disabled={isRecording && !!takeRecordingRef.current}
           aria-label="Toggle repeat"
           title="Toggle repeat mode"
         >
@@ -371,7 +523,9 @@ export default function TransportBar() {
                   ? 'Record'
                   : armedTracks.length === 0
                     ? 'Arm a track to record'
-                    : 'Select an input device to record'
+                    : !selectedDeviceId && !permissionGranted
+                      ? 'Click to allow microphone access'
+                      : 'Record one take; enable repeat with a time selection to capture multiple passes'
           }
         >
           {isCountingIn ? '⏳' : '⏺'}
@@ -428,6 +582,7 @@ export default function TransportBar() {
           type="number"
           className={styles.bpmInput}
           value={bpm}
+          disabled={isRecording && !!takeRecordingRef.current}
           min={20}
           max={300}
           onChange={(e) => setBpm(Number(e.target.value))}

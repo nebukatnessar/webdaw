@@ -62,11 +62,22 @@ export async function scheduleCountIn(bars: number, bpm: number): Promise<boolea
   return !countInCancelled;
 }
 
-export async function startRecording(deviceId: string | null): Promise<void> {
-  const stream = await navigator.mediaDevices.getUserMedia({
-    audio: deviceId ? { deviceId: { exact: deviceId } } : true,
+export async function prepareRecording(deviceId: string | null): Promise<void> {
+  // Disable the browser's voice-call processing: echo cancellation fights the
+  // live monitor below and gates the signal, which makes takes sound choppy.
+  activeStream = await navigator.mediaDevices.getUserMedia({
+    audio: {
+      ...(deviceId ? { deviceId: { exact: deviceId } } : {}),
+      echoCancellation: false,
+      noiseSuppression: false,
+      autoGainControl: false,
+    },
   });
-  activeStream = stream;
+}
+
+export function startRecording(): void {
+  const stream = activeStream;
+  if (!stream) throw new Error('Recording input has not been prepared');
   recordedChunks = [];
 
   // Route the mic to output for immediate record monitoring.
@@ -123,4 +134,21 @@ export async function stopRecording(): Promise<AudioBuffer | null> {
   const arrayBuffer = await blob.arrayBuffer();
   const ctx = getAudioContext();
   return ctx.decodeAudioData(arrayBuffer);
+}
+
+export function splitRecordingIntoTakes(buffer: AudioBuffer, takeDurationSecs: number): AudioBuffer[] {
+  if (!Number.isFinite(takeDurationSecs) || takeDurationSecs <= 0) return [];
+  const takeLength = Math.max(1, Math.round(takeDurationSecs * buffer.sampleRate));
+  const takes: AudioBuffer[] = [];
+
+  for (let start = 0; start < buffer.length; start += takeLength) {
+    const end = Math.min(buffer.length, start + takeLength);
+    const take = getAudioContext().createBuffer(buffer.numberOfChannels, end - start, buffer.sampleRate);
+    for (let channel = 0; channel < buffer.numberOfChannels; channel++) {
+      take.copyToChannel(buffer.getChannelData(channel).subarray(start, end), channel);
+    }
+    takes.push(take);
+  }
+
+  return takes;
 }

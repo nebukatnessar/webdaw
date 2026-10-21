@@ -40,6 +40,8 @@ export interface SerializedTrack {
   volume: number; // 0–1
   pan: number;    // -1 to 1
   color: string;
+  recordingMode?: 'layered' | 'multiTake';
+  showAllTakes?: boolean;
   clips: SerializedClip[];
   compressor?: { enabled: boolean; threshold: number; ratio: number; attack: number; release: number; knee: number; makeupGain: number };
   gate?: { enabled: boolean; threshold: number; attack: number; hold: number; release: number; range: number };
@@ -64,6 +66,10 @@ export interface SerializedClip {
   fadeInType?: string; // 'linear' | 'exponential' | 'logarithmic'
   fadeOutType?: string; // 'linear' | 'exponential' | 'logarithmic'
   fadeType?: string; // Legacy pre-split shape; applied to both edges on load
+  takeGroupId?: string;
+  takeNumber?: number;
+  activeTake?: boolean;
+  comped?: boolean;
   audioFile: string | null; // Relative path to audio file, e.g., "audio/clip1.wav"
   // Session-scoped id into the in-memory audio buffer cache. Only meaningful
   // for the localStorage auto-save round-trip (restoring across a refresh

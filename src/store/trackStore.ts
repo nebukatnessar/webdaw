@@ -2,6 +2,7 @@
 import { create } from 'zustand';
 import { Track, Clip, FadeType } from '../types/daw';
 import { generateClipId } from '../utils/idGenerator';
+import { groupTakes } from '../audio/takes';
 
 export interface TrackState {
   tracks: Track[];
@@ -27,6 +28,14 @@ export interface TrackState {
   toggleTrackSelection: (trackId: string) => void;
   clearSelectedTracks: () => void;
   addClipToTrack: (trackId: string, clip: Omit<Clip, 'id' | 'trackId' | 'color'> & Partial<Pick<Clip, 'trackId' | 'color'>>) => void;
+  addRecordedTakes: (takeSets: { trackId: string; clips: Omit<Clip, 'id' | 'trackId' | 'color'>[] }[]) => void;
+  prepareTakeGroup: (
+    trackIds: string[],
+    startBeat: number,
+    endBeat: number,
+    takeGroupIds: Record<string, string>,
+    baseTakeNumbers: Record<string, number>,
+  ) => void;
   removeClipFromTrack: (trackId: string, clipId: string) => void;
   updateClip: (trackId: string, clipId: string, updates: Partial<Clip>) => void;
   selectClip: (clipId: string, additive?: boolean) => void;
@@ -69,6 +78,12 @@ export interface TrackState {
   
   // Clip-level mute function
   toggleMuteSelectedClips: () => void;
+  selectTake: (trackId: string, takeGroupId: string, takeNumber: number) => void;
+  createTakeComp: (trackId: string, takeGroupId: string) => void;
+  playTakeComp: (trackId: string, takeGroupId: string) => void;
+  cycleTake: (trackId: string, direction: -1 | 1) => void;
+  toggleTakeLanes: (trackId: string) => void;
+  explodeTakeGroup: (trackId: string, takeGroupId: string) => void;
   
   // Reorder tracks by moving a track from one index to another
   reorderTrack: (fromIndex: number, toIndex: number) => void;
@@ -287,6 +302,88 @@ export const useTrackStore = create<TrackState>((set) => ({
       undoStack: [...state.undoStack, state.tracks],
       redoStack: [],
     }));
+  },
+
+  addRecordedTakes: (takeSets) => {
+    set((state) => {
+      const passCount = Math.max(0, ...takeSets.map((takeSet) => takeSet.clips.length));
+      if (passCount === 0) return state;
+
+      let tracks = state.tracks;
+      let undoStack = state.undoStack;
+      for (let pass = 0; pass < passCount; pass++) {
+        const passTakes = takeSets.filter((takeSet) => takeSet.clips[pass]);
+        if (passTakes.length === 0) continue;
+        undoStack = [...undoStack, tracks];
+        tracks = tracks.map((track) => {
+          const takeSet = passTakes.find((item) => item.trackId === track.id);
+          const take = takeSet?.clips[pass];
+          if (!take) return track;
+          const clips = track.clips.map((clip) =>
+            clip.takeGroupId === take.takeGroupId ? { ...clip, activeTake: false } : clip,
+          );
+          return {
+            ...track,
+            clips: [...clips, {
+              ...take,
+              id: generateClipId(),
+              trackId: track.id,
+              color: track.color,
+              activeTake: true,
+            }],
+          };
+        });
+      }
+
+      return { tracks, undoStack, redoStack: [] };
+    });
+  },
+
+  prepareTakeGroup: (trackIds, startBeat, endBeat, takeGroupIds, baseTakeNumbers) => {
+    set((state) => {
+      const targetTrackIds = new Set(trackIds);
+      let didChange = false;
+      const tracks = state.tracks.map((track) => {
+        if (!targetTrackIds.has(track.id)) return track;
+        return {
+          ...track,
+          clips: track.clips.flatMap((clip) => {
+            if (clip.takeGroupId || clip.startBeat + clip.durationBeats <= startBeat || clip.startBeat >= endBeat) {
+              return [clip];
+            }
+
+            const boundaries = [startBeat, endBeat].filter(
+              (beat) => beat > clip.startBeat && beat < clip.startBeat + clip.durationBeats,
+            );
+            const splitPoints = [clip.startBeat, ...boundaries, clip.startBeat + clip.durationBeats];
+            return splitPoints.slice(1).map((segmentEnd, index) => {
+              const segmentStart = splitPoints[index];
+              const isInsideSelection = segmentStart >= startBeat && segmentEnd <= endBeat;
+              if (isInsideSelection) didChange = true;
+              return {
+                ...clip,
+                id: index === 0 ? clip.id : generateClipId(),
+                startBeat: segmentStart,
+                durationBeats: segmentEnd - segmentStart,
+                bufferOffsetBeats: (clip.bufferOffsetBeats ?? 0) + segmentStart - clip.startBeat,
+                fadeInDuration: segmentStart === clip.startBeat ? clip.fadeInDuration : 0,
+                fadeOutDuration: segmentEnd === clip.startBeat + clip.durationBeats ? clip.fadeOutDuration : 0,
+                ...(isInsideSelection ? {
+                  takeGroupId: takeGroupIds[track.id],
+                  takeNumber: (baseTakeNumbers[track.id] ?? 0) + 1,
+                  activeTake: true,
+                  comped: false,
+                } : {}),
+              };
+            });
+          }),
+        };
+      });
+
+      return didChange
+        ? { tracks, undoStack: [...state.undoStack, state.tracks], redoStack: [] }
+        : state;
+    });
   },
 
   addClip: ((trackId: string, clipOrStartBeat: number | (Omit<Clip, 'id' | 'trackId' | 'color'> & Partial<Pick<Clip, 'trackId' | 'color'>>), durationBeats?: number, name?: string, audioBufferId?: string) => {
@@ -935,6 +1032,118 @@ export const useTrackStore = create<TrackState>((set) => ({
       if (!didToggle) return state;
       return {
         tracks,
+        undoStack: [...state.undoStack, state.tracks],
+        redoStack: [],
+      };
+    });
+  },
+
+  selectTake: (trackId, takeGroupId, takeNumber) => {
+    set((state) => ({
+      tracks: state.tracks.map((track) => track.id !== trackId ? track : {
+        ...track,
+        clips: track.clips.map((clip) => clip.takeGroupId === takeGroupId
+          ? { ...clip, activeTake: clip.takeNumber === takeNumber }
+          : clip),
+      }),
+    }));
+  },
+
+  createTakeComp: (trackId, takeGroupId) => {
+    set((state) => {
+      const selectedClipIds = new Set(state.selectedClipIds);
+      const selectedTakeIds = new Set(
+        state.tracks
+          .find((track) => track.id === trackId)
+          ?.clips.filter((clip) => clip.takeGroupId === takeGroupId && selectedClipIds.has(clip.id))
+          .map((clip) => clip.id) ?? [],
+      );
+      if (selectedTakeIds.size === 0) return state;
+
+      return {
+        tracks: state.tracks.map((track) => track.id !== trackId ? track : {
+          ...track,
+          clips: track.clips.map((clip) => clip.takeGroupId === takeGroupId
+            ? { ...clip, comped: selectedTakeIds.has(clip.id), activeTake: false }
+            : clip),
+        }),
+        undoStack: [...state.undoStack, state.tracks],
+        redoStack: [],
+      };
+    });
+  },
+
+  playTakeComp: (trackId, takeGroupId) => {
+    set((state) => ({
+      tracks: state.tracks.map((track) => track.id !== trackId ? track : {
+        ...track,
+        clips: track.clips.map((clip) => clip.takeGroupId === takeGroupId
+          ? { ...clip, activeTake: false }
+          : clip),
+      }),
+    }));
+  },
+
+  cycleTake: (trackId, direction) => {
+    set((state) => {
+      const track = state.tracks.find((item) => item.id === trackId);
+      if (!track) return state;
+      const groups = [...groupTakes(track.clips).entries()]
+        .sort(([, a], [, b]) => Math.max(...a.map((clip) => clip.startBeat)) - Math.max(...b.map((clip) => clip.startBeat)));
+      const [takeGroupId, takes] = groups[groups.length - 1] ?? [];
+      if (!takeGroupId || !takes) return state;
+
+      const takeNumbers = [...new Set(takes.map((clip) => clip.takeNumber ?? 0))].sort((a, b) => a - b);
+      if (takeNumbers.length < 2) return state;
+      const activeTakeNumber = takes.find((clip) => clip.activeTake)?.takeNumber ?? takeNumbers[takeNumbers.length - 1];
+      const activeIndex = takeNumbers.indexOf(activeTakeNumber);
+      const nextIndex = (activeIndex + direction + takeNumbers.length) % takeNumbers.length;
+      const nextTakeNumber = takeNumbers[nextIndex];
+
+      return {
+        tracks: state.tracks.map((item) => item.id !== trackId ? item : {
+          ...item,
+          clips: item.clips.map((clip) => clip.takeGroupId === takeGroupId
+            ? { ...clip, activeTake: clip.takeNumber === nextTakeNumber }
+            : clip),
+        }),
+      };
+    });
+  },
+
+  toggleTakeLanes: (trackId) => {
+    set((state) => ({
+      tracks: state.tracks.map((track) => track.id === trackId
+        ? { ...track, showAllTakes: !track.showAllTakes }
+        : track),
+    }));
+  },
+
+  explodeTakeGroup: (trackId, takeGroupId) => {
+    set((state) => {
+      const track = state.tracks.find((item) => item.id === trackId);
+      if (!track) return state;
+      const group = groupTakes(track.clips).get(takeGroupId);
+      if (!group) return state;
+      const takeNumbers = [...new Set(group.map((clip) => clip.takeNumber ?? 0))].sort((a, b) => a - b);
+      if (takeNumbers.length === 0) return state;
+      const createdAt = Date.now();
+      const newTracks: Track[] = takeNumbers.map((takeNumber, index) => {
+        const id = `track-${createdAt}-${index}`;
+        return {
+          ...track,
+          id,
+          name: `${track.name} Take ${takeNumber}`,
+          armed: false,
+          recordingMode: 'layered',
+          showAllTakes: false,
+          clips: group
+            .filter((clip) => clip.takeNumber === takeNumber)
+            .map((clip) => ({ ...clip, id: generateClipId(), trackId: id, takeGroupId: undefined, takeNumber: undefined, activeTake: undefined, comped: undefined })),
+        };
+      });
+      return {
+        tracks: [...state.tracks, ...newTracks],
         undoStack: [...state.undoStack, state.tracks],
         redoStack: [],
       };

@@ -26,6 +26,14 @@
   filter: brightness(1.1);
 }
 
+.clip.takeActive {
+  box-shadow: inset 0 0 0 2px var(--accent);
+}
+
+.clip.takeComped {
+  border-style: dashed;
+}
+
 /* Muted clips read grayed out; kept after .selected so it wins when both apply */
 .clip.muted {
   filter: grayscale(0.9);
