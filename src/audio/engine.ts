@@ -32,6 +32,8 @@ import {
   getDefaultDelaySettings,
 } from './delay';
 import { scheduleClipGainEnvelope } from './clip';
+import { scheduleMidiPlayback, stopAllMidiVoices } from './midiSynth';
+import { useMidiStore } from '../store/midiStore';
 
 let audioCtx: AudioContext | null = null;
 const bufferMap = new Map<string, AudioBuffer>();
@@ -183,6 +185,15 @@ function getOrCreateTrackNodes(ctx: AudioContext, trackId: string) {
     trackNodes.set(trackId, nodes);
   }
   return nodes;
+}
+
+/**
+ * The per-track gain node that MIDI notes route into, so note previews and
+ * playback share the track's volume/pan/effects chain (piano roll #26).
+ * Returns undefined until the track has been part of a playback pass.
+ */
+export function getTrackDestination(trackId: string): AudioNode | undefined {
+  return trackNodes.get(trackId)?.gainNode;
 }
 
 /**
@@ -444,6 +455,13 @@ export function schedulePlayback(
       };
     }
   }
+
+  // MIDI notes share the same beat clock and per-track gain nodes, so they
+  // are scheduled right after the audio clips and stay in sync with them.
+  scheduleMidiPlayback(ctx, tracks, useMidiStore.getState().notes, playheadBeats, bpm, (trackId) => {
+    const nodes = trackNodes.get(trackId);
+    return nodes?.gainNode;
+  });
 }
 
 export function stopAllSources(): void {
@@ -455,6 +473,7 @@ export function stopAllSources(): void {
     }
   }
   activeSources.length = 0;
+  stopAllMidiVoices();
 }
 
 // Anchor (audio-clock time + beat position) that the displayed playhead is

@@ -1,4 +1,4 @@
-import type { MasterEffects } from './daw';
+import type { MasterEffects, MidiNote } from './daw';
 
 // Project metadata stored in localStorage for the load dialog
 export interface ProjectMetadata {
@@ -29,6 +29,8 @@ export interface SerializedProject {
   name: string;
   transport: ProjectTransportState;
   tracks: SerializedTrack[];
+  // MIDI notes for the piano roll (feature #26); absent in older projects
+  midiNotes?: MidiNote[];
 }
 
 // Track with clips that reference audio files

@@ -129,3 +129,16 @@ export interface Project {
   masterVolume: number;
   masterEffects?: MasterEffects;
 }
+
+// A single MIDI note in the piano roll (feature #26, tasks #63/#64). Pitch is
+// a MIDI note number (0-127, 60 = middle C); start/duration are in beats,
+// matching the clip timeline so notes and audio share one clock. Velocity is
+// 1-127 (MIDI convention).
+export interface MidiNote {
+  id: string;
+  trackId: string;
+  pitch: number;        // MIDI note number 0-127
+  startBeat: number;    // in beats
+  durationBeats: number;
+  velocity: number;     // 1-127
+}

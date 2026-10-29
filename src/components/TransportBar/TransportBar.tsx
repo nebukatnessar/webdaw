@@ -12,7 +12,12 @@ import ProjectDialog from '../ProjectDialog/ProjectDialog';
 import { toggleTheme, setHighContrast, isHighContrast, getTheme } from '../../utils/theme';
 import type { Project } from '../../types/daw';
 
-export default function TransportBar() {
+interface TransportBarProps {
+  onTogglePianoRoll?: () => void;
+  pianoRollActive?: boolean;
+}
+
+export default function TransportBar({ onTogglePianoRoll, pianoRollActive = false }: TransportBarProps) {
   const { bpm, isPlaying, playheadBeats, isRepeat, isSnapEnabled, gridDivisionBeats, zoomLevel, selectionStart, selectionEnd, masterVolume, setBpm, play, pause, stop, setPlayheadBeats, toggleRepeat, toggleSnap, setGridDivisionBeats } =
     useTransportStore();
   const tracks = useTrackStore((s) => s.tracks);
@@ -618,6 +623,16 @@ export default function TransportBar() {
           })}
         >
           + Track
+        </button>
+
+        <button
+          className={styles.btn + ' ' + (pianoRollActive ? styles.active : '')}
+          onClick={onTogglePianoRoll}
+          disabled={!onTogglePianoRoll}
+          aria-label="Toggle piano roll"
+          title="Toggle the MIDI piano roll editor"
+        >
+          🎹 Piano Roll
         </button>
 
         {/* Theme toggle buttons */}

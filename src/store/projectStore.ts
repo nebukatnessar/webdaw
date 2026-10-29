@@ -23,6 +23,7 @@ import * as handleStore from '../utils/handleStore';
 // Import stores to access their state outside React components
 import { useTrackStore as trackStore } from './trackStore';
 import { useTransportStore as transportStore } from './transportStore';
+import { useMidiStore as midiStore } from './midiStore';
 
 // Progress shown by the modal indicator during project save/load (issue
 // #168). A `total` of 0 means the number of steps is not (yet) known and
@@ -238,6 +239,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
           await hydrateAudioFromCache(tracks);
 
           trackStore.getState().setTracks(tracks);
+          midiStore.getState().setNotes(autoSaveSerialized.midiNotes ?? []);
           transportStore.getState().setTransportState({
             bpm: autoSaveSerialized.transport.bpm,
             playheadBeats: autoSaveSerialized.transport.playheadBeats,
@@ -308,8 +310,8 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
     // Create project ID if needed
     const projectId = state.currentProjectId || `project-${now}`;
     
-    // Create serialized project
-    const serialized = createProjectFromState(tracks, transportState, projectName);
+    // Create serialized project (MIDI notes from the piano roll ride along)
+    const serialized = createProjectFromState(tracks, transportState, projectName, midiStore.getState().notes);
     
     // Check if File System Access API is available
     const hasFileSystemAccess = typeof window !== 'undefined' && 'showDirectoryPicker' in window;
@@ -511,6 +513,9 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
 
     void handleStore.saveHandle(PROJECT_FOLDER_HANDLE_KEY, folderHandle);
 
+    // MIDI notes from the piano roll (older projects simply have none)
+    midiStore.getState().setNotes(serialized.midiNotes ?? []);
+
     // Save this as the last opened project for auto-restore on F5
     try {
       localStorage.setItem(PROJECT_AUTO_SAVE_KEY, JSON.stringify(serialized));
@@ -546,6 +551,8 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
     // Clear audio buffer map and its durable cache
     engine.clearAllBuffers();
     void bufferCache.clearBufferCache();
+    // A brand new project starts with an empty piano roll
+    midiStore.getState().clearNotes();
     // A brand new project has no folder yet - don't let a refresh try to
     // reconnect to whatever project was open before this one.
     void handleStore.deleteHandle(PROJECT_FOLDER_HANDLE_KEY);
@@ -640,7 +647,9 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
       currentProjectName: projectName,
       fileStructure: null, // No file system handle for imported projects
     });
-    
+
+    midiStore.getState().setNotes(serialized.midiNotes ?? []);
+
     return { tracks, transport: serialized.transport };
   },
 }));
