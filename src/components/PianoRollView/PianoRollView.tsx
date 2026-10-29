@@ -95,6 +95,8 @@ export default function PianoRollView() {
   );
 
   const noteHeight = Math.min(40, Math.max(8, BASE_NOTE_HEIGHT * zoomLevel));
+  // The sticky ruler is a DOM element, so the canvas only holds the pitch
+  // grid; total scroll height adds the ruler strip back on top.
   const contentHeight = (MAX_PITCH + 1) * noteHeight + RULER_HEIGHT;
 
   const totalBars = useMemo(() => {
@@ -135,13 +137,15 @@ export default function PianoRollView() {
 
   const minDuration = gridDivisionBeats;
 
+  // Canvas coordinates: the canvas now sits below the sticky ruler, so its own
+  // top edge is row 0 (pitch 127).
   const getPos = useCallback((e: React.MouseEvent | MouseEvent) => {
-    const scroll = scrollRef.current!;
-    const rect = scroll.getBoundingClientRect();
-    const x = e.clientX - rect.left + scroll.scrollLeft;
-    const y = e.clientY - rect.top + scroll.scrollTop;
+    const canvas = canvasRef.current!;
+    const rect = canvas.getBoundingClientRect();
+    const x = e.clientX - rect.left + (scrollRef.current?.scrollLeft ?? 0);
+    const y = e.clientY - rect.top + (scrollRef.current?.scrollTop ?? 0) - RULER_HEIGHT;
     const beat = Math.max(0, x / pixelsPerBeat);
-    const row = Math.floor((y - RULER_HEIGHT) / noteHeight);
+    const row = Math.floor(y / noteHeight);
     const pitch = Math.min(MAX_PITCH, Math.max(0, MAX_PITCH - row));
     return { beat, pitch, y };
   }, [pixelsPerBeat, noteHeight]);
@@ -169,35 +173,38 @@ export default function PianoRollView() {
     void engine.resumeContext();
   }, []);
 
+  // The ruler is now a sticky DOM strip (handleRulerMouseDown); the canvas
+  // starts below it, so canvas clicks are always grid clicks.
+  const scrubPlayheadTo = (clientX: number) => {
+    const scroll = scrollRef.current;
+    if (!scroll) return;
+    const rect = scroll.getBoundingClientRect();
+    const contentX = clientX - rect.left + scroll.scrollLeft;
+    const b = snapBeat(Math.max(0, contentX / pixelsPerBeat));
+    if (isPlaying) {
+      engine.seekDuringPlayback(useTrackStore.getState().tracks, b, useTransportStore.getState().bpm);
+    }
+    setPlayheadBeats(b);
+  };
+
+  const handleRulerMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (!trackId) return;
+    ensureAudio();
+    scrubPlayheadTo(e.clientX);
+    const move = (ev: MouseEvent) => scrubPlayheadTo(ev.clientX);
+    const up = () => {
+      window.removeEventListener('mousemove', move);
+      window.removeEventListener('mouseup', up);
+    };
+    window.addEventListener('mousemove', move);
+    window.addEventListener('mouseup', up);
+    e.preventDefault();
+  };
+
   const handleCanvasMouseDown = (e: React.MouseEvent<HTMLCanvasElement>) => {
     if (!trackId) return;
     ensureAudio();
-    const { beat, pitch, y } = getPos(e);
-
-    // Ruler strip: scrub the playhead
-    if (y < RULER_HEIGHT) {
-      const b = snapBeat(beat);
-      if (isPlaying) {
-        engine.seekDuringPlayback(useTrackStore.getState().tracks, b, useTransportStore.getState().bpm);
-      }
-      setPlayheadBeats(b);
-      const move = (ev: MouseEvent) => {
-        const pos = getPos(ev);
-        const nb = snapBeat(pos.beat);
-        if (isPlaying) {
-          engine.seekDuringPlayback(useTrackStore.getState().tracks, nb, useTransportStore.getState().bpm);
-        }
-        setPlayheadBeats(nb);
-      };
-      const up = () => {
-        window.removeEventListener('mousemove', move);
-        window.removeEventListener('mouseup', up);
-      };
-      window.addEventListener('mousemove', move);
-      window.addEventListener('mouseup', up);
-      e.preventDefault();
-      return;
-    }
+    const { beat, pitch } = getPos(e);
 
     const hit = hitNote(beat, pitch);
 
@@ -402,7 +409,8 @@ export default function PianoRollView() {
     };
   }, [basePitch, trackId, trackSynth, selectedNoteIds, gridDivisionBeats, ensureAudio, previewNote, removeNotes, midiUndo, midiRedo, moveNotes]);
 
-  // Canvas rendering
+  // Canvas rendering (grid + notes only; the ruler strip is a separate sticky
+  // DOM element so it stays visible while scrolling vertically)
   useEffect(() => {
     const canvas = canvasRef.current;
     const scroll = scrollRef.current;
@@ -417,17 +425,13 @@ export default function PianoRollView() {
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     const c = colorsRef.current;
 
-    // Background
+    // Background (canvas covers just the grid area below the ruler)
     ctx.fillStyle = c.bg1;
-    ctx.fillRect(0, 0, contentWidth, contentHeight);
-
-    // Ruler background
-    ctx.fillStyle = c.bg2;
-    ctx.fillRect(0, 0, contentWidth, RULER_HEIGHT);
+    ctx.fillRect(0, 0, contentWidth, contentHeight - RULER_HEIGHT);
 
     // Horizontal pitch rows: black-key rows shaded, C rows marked
     for (let p = 0; p <= MAX_PITCH; p++) {
-      const y = RULER_HEIGHT + (MAX_PITCH - p) * noteHeight;
+      const y = (MAX_PITCH - p) * noteHeight;
       if (isBlackKey(p)) {
         ctx.fillStyle = 'rgba(127, 127, 127, 0.08)';
         ctx.fillRect(0, y, contentWidth, noteHeight);
@@ -446,7 +450,7 @@ export default function PianoRollView() {
       ctx.stroke();
     }
 
-    // Vertical grid lines: subdivisions, beats, bars
+    // Vertical grid lines: subdivisions, beats, bars (start below the ruler)
     const totalBeats = totalBars * BEATS_PER_BAR;
     const subBeats = Math.max(gridDivisionBeats, 1 / 16);
     for (let b = 0; b <= totalBeats; b += subBeats) {
@@ -455,22 +459,9 @@ export default function PianoRollView() {
       const isBeat = Math.abs(b % 1) < 1e-6;
       ctx.strokeStyle = isBar ? c.border : isBeat ? 'rgba(127,127,127,0.35)' : 'rgba(127,127,127,0.12)';
       ctx.beginPath();
-      ctx.moveTo(x, RULER_HEIGHT);
-      ctx.lineTo(x, contentHeight);
-      ctx.stroke();
-    }
-
-    // Ruler: bar numbers and ticks
-    ctx.fillStyle = c.textDim;
-    ctx.font = '10px sans-serif';
-    for (let bar = 0; bar <= totalBars; bar++) {
-      const x = bar * BEATS_PER_BAR * pixelsPerBeat;
-      ctx.strokeStyle = c.border;
-      ctx.beginPath();
       ctx.moveTo(x, 0);
-      ctx.lineTo(x, RULER_HEIGHT);
+      ctx.lineTo(x, contentHeight - RULER_HEIGHT);
       ctx.stroke();
-      if (bar < totalBars) ctx.fillText(String(bar + 1), x + 4, RULER_HEIGHT - 8);
     }
 
     // Notes
@@ -479,7 +470,7 @@ export default function PianoRollView() {
       const note = { ...n, ...override };
       const x = note.startBeat * pixelsPerBeat;
       const w = Math.max(2, note.durationBeats * pixelsPerBeat);
-      const y = RULER_HEIGHT + (MAX_PITCH - note.pitch) * noteHeight;
+      const y = (MAX_PITCH - note.pitch) * noteHeight;
       const isSel = selected.has(n.id);
       const alpha = 0.45 + 0.55 * (note.velocity / 127);
       ctx.globalAlpha = alpha;
@@ -521,8 +512,8 @@ export default function PianoRollView() {
       const x1 = Math.max(drag.startBeat, drag.currentBeat) * pixelsPerBeat;
       const p0 = Math.max(drag.startPitch, drag.currentPitch);
       const p1 = Math.min(drag.startPitch, drag.currentPitch);
-      const y0 = RULER_HEIGHT + (MAX_PITCH - p0) * noteHeight;
-      const y1 = RULER_HEIGHT + (MAX_PITCH - p1 + 1) * noteHeight;
+      const y0 = (MAX_PITCH - p0) * noteHeight;
+      const y1 = (MAX_PITCH - p1 + 1) * noteHeight;
       ctx.fillStyle = 'rgba(97, 175, 239, 0.15)';
       ctx.fillRect(x0, y0, Math.max(1, x1 - x0), Math.max(1, y1 - y0));
       ctx.strokeStyle = c.accent;
@@ -532,12 +523,14 @@ export default function PianoRollView() {
     // Playhead
     const px = playheadBeats * pixelsPerBeat;
     ctx.fillStyle = '#ff4444';
-    ctx.fillRect(px - 1, 0, 2, contentHeight);
+    ctx.fillRect(px - 1, 0, 2, contentHeight - RULER_HEIGHT);
   }, [trackNotes, selectedNoteIds, pixelsPerBeat, noteHeight, contentWidth, contentHeight, totalBars, gridDivisionBeats, playheadBeats, drag, trackId, minDuration]);
 
   // Piano keyboard strip (visible range only), synced to canvas scroll
   const visibleTopPitch = Math.min(MAX_PITCH, Math.max(0, MAX_PITCH - Math.floor((kbScrollTop - RULER_HEIGHT) / noteHeight)));
   const visibleBottomPitch = Math.max(0, MAX_PITCH - Math.floor((kbScrollTop + (scrollRef.current?.clientHeight ?? 600) - RULER_HEIGHT) / noteHeight));
+  // Keyboard strip: keys start below the sticky ruler cell
+  const kbKeysTop = RULER_HEIGHT;
   const keyPitches: number[] = [];
   for (let p = visibleTopPitch; p >= visibleBottomPitch; p--) keyPitches.push(p);
 
@@ -620,7 +613,9 @@ export default function PianoRollView() {
       )}
       <div className={styles.body}>
         <div className={styles.keyboard} style={{ height: '100%' }}>
-          <div style={{ transform: `translateY(${-kbScrollTop}px)`, position: 'absolute', top: 0, left: 0, right: 0 }}>
+          {/* Sticky ruler cell above the keys, stays put on vertical scroll */}
+          <div className={styles.rulerCell} aria-hidden="true">Bar</div>
+          <div style={{ transform: `translateY(${-kbScrollTop}px)`, position: 'absolute', top: kbKeysTop, left: 0, right: 0 }}>
             {keyPitches.map((p) => {
               const y = RULER_HEIGHT + (MAX_PITCH - p) * noteHeight;
               const active = [...heldKeys].some((k) => basePitch + (KEY_TO_SEMITONE[k] ?? -999) === p);
@@ -646,9 +641,31 @@ export default function PianoRollView() {
           onWheel={handleWheel}
           onContextMenu={(e) => e.preventDefault()}
         >
+          {/* Sticky beats/bar ruler: scrolls horizontally with the grid but
+              stays pinned to the top on vertical scroll */}
+          <div
+            className={styles.ruler}
+            style={{ width: contentWidth }}
+            onMouseDown={handleRulerMouseDown}
+          >
+            {Array.from({ length: totalBars + 1 }, (_, bar) => (
+              <div
+                key={bar}
+                className={styles.rulerCellBar}
+                style={{ left: bar * BEATS_PER_BAR * pixelsPerBeat }}
+              >
+                {bar < totalBars ? String(bar + 1) : ''}
+              </div>
+            ))}
+            <div
+              className={styles.rulerPlayhead}
+              style={{ left: playheadBeats * pixelsPerBeat }}
+            />
+          </div>
           <canvas
             ref={canvasRef}
             className={styles.canvas}
+            style={{ marginTop: RULER_HEIGHT }}
             onMouseDown={handleCanvasMouseDown}
           />
           {tracks.length === 0 && (
