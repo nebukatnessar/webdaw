@@ -23,7 +23,7 @@ function formatPan(pan: number): string {
 }
 
 export default function TrackHeaderList({ scrollRef, onScroll }: Props) {
-  const { tracks, updateTrack, selectedTrackIds, selectedClipIds, activeTrackId, selectTrack } = useTrackStore();
+  const { tracks, updateTrack, selectedTrackIds, selectedClipIds, activeTrackId, selectTrack, addTrack } = useTrackStore();
   const selectTake = useTrackStore((s) => s.selectTake);
   const createTakeComp = useTrackStore((s) => s.createTakeComp);
   const playTakeComp = useTrackStore((s) => s.playTakeComp);
@@ -152,6 +152,20 @@ export default function TrackHeaderList({ scrollRef, onScroll }: Props) {
     setDragStartY(null);
   };
 
+  // Double-click empty space in the list to add a track
+  const handleListDoubleClick = (e: React.MouseEvent<HTMLDivElement>) => {
+    if ((e.target as HTMLElement).closest(`.${styles.row}`)) return;
+    addTrack({
+      name: `Track ${tracks.length + 1}`,
+      muted: false,
+      soloed: false,
+      armed: false,
+      volume: 1,
+      pan: 0,
+      color: '#4f46e5',
+    });
+  };
+
   // Handle row click for track selection
   const handleRowClick = (e: React.MouseEvent, trackId: string) => {
     // Ignore clicks on buttons (they handle their own logic)
@@ -225,7 +239,14 @@ export default function TrackHeaderList({ scrollRef, onScroll }: Props) {
       onDrop={handleDrop}
     >
       <div className={styles.rulerSpacer} aria-hidden="true" />
-      <div className={styles.scroll} ref={scrollRef} onScroll={onScroll} role="listbox" aria-label="Track list">
+      <div
+        className={styles.scroll}
+        ref={scrollRef}
+        onScroll={onScroll}
+        onDoubleClick={handleListDoubleClick}
+        role="listbox"
+        aria-label="Track list"
+      >
         {tracks.map((track) => {
           const isSelected = selectedTrackIds.includes(track.id);
           const isActive = activeTrackId === track.id;
@@ -442,7 +463,7 @@ export default function TrackHeaderList({ scrollRef, onScroll }: Props) {
         })}
         {tracks.length === 0 && (
           <div className={styles.empty}>
-            Drop audio files here · or use &ldquo;+ Track&rdquo;
+            Drop audio files here · double-click to add a track · or use &ldquo;+ Track&rdquo;
           </div>
         )}
         <div className={styles.dropHint}>
