@@ -1,6 +1,6 @@
 import { decodeFile } from '../audio/engine';
 import { encodeWav } from '../audio/wav';
-import type { MasterEffects, Track } from '../types/daw';
+import type { MasterEffects, MidiNote, Track } from '../types/daw';
 import type {
   SerializedProject,
   SerializedTrack,
@@ -84,7 +84,8 @@ export function createProjectFromState(
     masterVolume: number;
     masterEffects?: MasterEffects;
   },
-  name: string = 'Untitled Project'
+  name: string = 'Untitled Project',
+  midiNotes?: MidiNote[],
 ): SerializedProject {
   return {
     version: PROJECT_VERSION,
@@ -137,6 +138,14 @@ export function createProjectFromState(
         audioFile: clip.audioFile ?? null,
         audioBufferId: clip.audioBufferId,
       })),
+    })),
+    midiNotes: midiNotes?.map((n) => ({
+      id: n.id,
+      trackId: n.trackId,
+      pitch: n.pitch,
+      startBeat: n.startBeat,
+      durationBeats: n.durationBeats,
+      velocity: n.velocity,
     })),
   };
 }

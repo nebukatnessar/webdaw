@@ -9,9 +9,15 @@ import useTrackStore from './store/trackStore';
 import { useTransportStore } from './store/transportStore';
 import Toast from './components/Toast/Toast';
 import ProgressModal from './components/ProgressModal/ProgressModal';
+import PianoRollView from './components/PianoRollView/PianoRollView';
 import { handleKeyDown } from './keyboard/keyboardShortcuts';
 
+// Which lower workspace panel is shown: the arrange timeline or the MIDI
+// piano roll (feature #26).
+type ViewMode = 'arrange' | 'pianoRoll';
+
 function App() {
+  const [viewMode, setViewMode] = useState<ViewMode>('arrange');
   const headerRef = useRef<HTMLDivElement>(null);
   const arrangeRef = useRef<HTMLDivElement>(null);
   // Mutex flag to prevent infinite scroll-sync loops
@@ -193,11 +199,17 @@ function App() {
           </button>
         </div>
       )}
-      <TransportBar />
+      <TransportBar onTogglePianoRoll={() => setViewMode((v) => (v === 'arrange' ? 'pianoRoll' : 'arrange'))} pianoRollActive={viewMode === 'pianoRoll'} />
       <div className={styles.workspace}>
-        <TrackHeaderList scrollRef={headerRef} onScroll={onHeaderScroll} />
-        <ArrangeView scrollRef={arrangeRef} onScroll={onArrangeScroll} />
-        <MasterFader />
+        {viewMode === 'arrange' ? (
+          <>
+            <TrackHeaderList scrollRef={headerRef} onScroll={onHeaderScroll} />
+            <ArrangeView scrollRef={arrangeRef} onScroll={onArrangeScroll} />
+            <MasterFader />
+          </>
+        ) : (
+          <PianoRollView />
+        )}
       </div>
       {toast && <Toast message={toast.message} onClose={() => setToast(null)} key={toast.key} />}
       <ProgressModal />
