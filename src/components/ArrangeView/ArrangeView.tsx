@@ -7,7 +7,9 @@ import { BEATS_PER_BAR, MIN_TOTAL_BARS, TIMELINE_MARGIN_BARS } from '../../const
 import * as engine from '../../audio/engine';
 import { getActiveTakeNumber, getTrackDisplayHeight, groupTakes } from '../../audio/takes';
 import ClipBlock from './ClipBlock';
+import MidiMiniRoll from './MidiMiniRoll';
 import Ruler from './Ruler';
+import { useMidiStore } from '../../store/midiStore';
 
 interface Props {
   scrollRef: RefObject<HTMLDivElement | null>;
@@ -20,6 +22,7 @@ const AUTO_SCROLL_MARGIN = 60;
 
 export default function ArrangeView({ scrollRef, onScroll }: Props) {
   const tracks = useTrackStore((s: TrackState) => s.tracks);
+  const midiNotes = useMidiStore((s) => s.notes);
   const addClip = useTrackStore((s: TrackState) => s.addClipToTrack);
   const moveClip = useTrackStore((s: TrackState) => s.moveClip);
   const selectTrack = useTrackStore((s: TrackState) => s.selectTrack);
@@ -290,6 +293,18 @@ export default function ArrangeView({ scrollRef, onScroll }: Props) {
                       : clip.takeNumber === activeTakeNumbers.get(clip.takeGroupId)),
                   );
               
+              // When a track has MIDI notes but no audio clips, show a
+              // miniature piano roll spanning the lane so the MIDI content is
+              // visible from the arrange view.
+              const trackMidiNotes = midiNotes.filter((n) => n.trackId === track.id);
+              const showMiniRoll = visibleClips.length === 0 && trackMidiNotes.length > 0;
+              const minNoteStart = showMiniRoll
+                ? Math.min(...trackMidiNotes.map((n) => n.startBeat))
+                : 0;
+              const maxNoteEnd = showMiniRoll
+                ? Math.max(...trackMidiNotes.map((n) => n.startBeat + n.durationBeats))
+                : 0;
+
               return (
                 <div
                   key={track.id}
@@ -305,6 +320,18 @@ export default function ArrangeView({ scrollRef, onScroll }: Props) {
                   aria-selected={isSelected}
                   aria-label={`Track ${track.name}`}
                 >
+                  {showMiniRoll && (
+                    <div
+                      className={styles.midiRegion}
+                      style={{
+                        left: minNoteStart * pixelsPerBeat,
+                        width: Math.max(8, (maxNoteEnd - minNoteStart) * pixelsPerBeat),
+                      }}
+                      title="MIDI notes - open the piano roll to edit"
+                    >
+                      <MidiMiniRoll notes={trackMidiNotes} color={track.color} />
+                    </div>
+                  )}
                   {visibleClips.map((clip) => (
                     <ClipBlock
                       key={clip.id}

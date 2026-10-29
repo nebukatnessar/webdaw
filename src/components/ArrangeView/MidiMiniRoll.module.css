@@ -1,0 +1,8 @@
+.canvas {
+  position: absolute;
+  inset: 4px;
+  width: calc(100% - 8px);
+  height: calc(100% - 8px);
+  pointer-events: none;
+  opacity: 0.85;
+}

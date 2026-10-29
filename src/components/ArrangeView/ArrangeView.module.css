@@ -161,6 +161,18 @@
   color: var(--text);
 }
 
+/* Miniature piano-roll region for MIDI-only tracks */
+.midiRegion {
+  position: absolute;
+  top: 4px;
+  bottom: 4px;
+  border-radius: 4px;
+  background: rgba(97, 175, 239, 0.08);
+  border: 1px dashed var(--border);
+  overflow: hidden;
+  pointer-events: none;
+}
+
 .addTrackZone {
   height: 52px;
   display: flex;
