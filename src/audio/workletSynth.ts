@@ -9,7 +9,7 @@ export type SynthId = 'base' | 'monarch' | 'fm';
 
 export const SYNTH_LABELS: Record<SynthId, string> = {
   base: 'Base Saw',
-  monarch: 'Monarch (Additive)',
+  monarch: 'Monarc Bass (webMonarc)',
   fm: 'FM Synth',
 };
 

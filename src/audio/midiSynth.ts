@@ -8,6 +8,7 @@
 // it); the audio context and per-track destinations are passed in.
 import type { MidiNote, SynthId, Track } from '../types/daw';
 import { startWorkletVoice, type WorkletVoice } from './workletSynth';
+import { MonarcEngine } from './monarcEngine';
 
 export type TrackDestinationResolver = (trackId: string) => AudioNode | undefined;
 
@@ -64,16 +65,52 @@ function startBaseVoice(
   };
 }
 
+// One MonarcEngine per track: it is monophonic with its own held-note stack,
+// so a single long-lived voice engine per track is the natural fit. Created
+// lazily on first use, keyed by track id, and torn down when the track is gone.
+const monarcEngines = new Map<string, MonarcEngine>();
+
+function getMonarcEngine(ctx: AudioContext, trackId: string, destination: AudioNode): MonarcEngine {
+  let engine = monarcEngines.get(trackId);
+  if (!engine) {
+    engine = new MonarcEngine({ context: ctx, destination });
+    monarcEngines.set(trackId, engine);
+  }
+  return engine;
+}
+
+export function disposeMonarcEngine(trackId: string): void {
+  monarcEngines.get(trackId)?.dispose();
+  monarcEngines.delete(trackId);
+}
+
 function startSynthVoice(
   ctx: AudioContext,
   destination: AudioNode,
   synth: SynthId,
   pitch: number,
   velocity: number,
-  options: { when?: number; durationSecs?: number } = {},
+  options: { when?: number; durationSecs?: number; trackId?: string } = {},
 ): Voice {
   if (synth === 'base') {
     return startBaseVoice(ctx, destination, pitch, velocity, options);
+  }
+  if (synth === 'monarch' && options.trackId) {
+    // Monarc is a monophonic engine: one noteOn now, noteOff when the note's
+    // hold ends (previews) or when playback stops.
+    const engine = getMonarcEngine(ctx, options.trackId, destination);
+    engine.noteOn(pitch, velocity / 127);
+    const holdSecs = options.durationSecs ?? PREVIEW_HOLD_SECS;
+    let timer: number | null = null;
+    if (options.durationSecs !== undefined) {
+      timer = window.setTimeout(() => engine.noteOff(pitch), holdSecs * 1000);
+    }
+    return {
+      stop: () => {
+        if (timer !== null) window.clearTimeout(timer);
+        engine.noteOff(pitch);
+      },
+    };
   }
   // Worklet prototypes are async (module registration); fire and forget - the
   // voice registers itself in activeVoices once created.
@@ -99,9 +136,10 @@ export function startNotePreview(
   synth: SynthId,
   note: Pick<MidiNote, 'pitch' | 'velocity'>,
   key: string,
+  trackId?: string,
 ): void {
   stopNotePreview(key);
-  const voice = startSynthVoice(ctx, destination, synth, note.pitch, note.velocity);
+  const voice = startSynthVoice(ctx, destination, synth, note.pitch, note.velocity, { trackId });
   activeVoices.set(key, voice);
 }
 
@@ -154,6 +192,7 @@ export function scheduleMidiPlayback(
     const voice = startSynthVoice(ctx, destination, track.synth ?? 'base', note.pitch, note.velocity, {
       when,
       durationSecs: duration,
+      trackId: track.id,
     });
     const key = `playback-${note.id}-${when}`;
     activeVoices.set(key, voice);
@@ -162,4 +201,5 @@ export function scheduleMidiPlayback(
 
 export function stopAllMidiVoices(): void {
   stopAllNotePreviews();
+  for (const engine of monarcEngines.values()) engine.allNotesOff();
 }

@@ -158,7 +158,7 @@ export default function PianoRollView() {
     if (!trackId) return;
     const dest = engine.getTrackDestination(trackId);
     if (!dest) return;
-    startNotePreview(engine.getAudioContext(), dest, trackSynth, { pitch, velocity }, key ?? `pitch-${pitch}-${Date.now()}`);
+    startNotePreview(engine.getAudioContext(), dest, trackSynth, { pitch, velocity }, key ?? `pitch-${pitch}-${Date.now()}`, trackId);
   }, [trackId, trackSynth]);
 
   const ensureAudio = useCallback(() => {

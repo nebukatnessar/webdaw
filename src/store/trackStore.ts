@@ -3,6 +3,7 @@ import { create } from 'zustand';
 import { Track, Clip, FadeType } from '../types/daw';
 import { generateClipId } from '../utils/idGenerator';
 import { groupTakes } from '../audio/takes';
+import { disposeMonarcEngine } from '../audio/midiSynth';
 
 export interface TrackState {
   tracks: Track[];
@@ -215,6 +216,8 @@ export const useTrackStore = create<TrackState>((set) => ({
   },
 
   removeTrack: (trackId) => {
+    // Tear down the track's Monarc synth engine (oscillators) if it had one
+    disposeMonarcEngine(trackId);
     set((state) => ({
       tracks: state.tracks.filter((t) => t.id !== trackId),
       selectedTrackIds: state.selectedTrackIds.filter((id) => id !== trackId),
@@ -1154,6 +1157,7 @@ export const useTrackStore = create<TrackState>((set) => ({
     set((state) => {
       const selectedIds = new Set(state.selectedTrackIds);
       const newTracks = state.tracks.filter((t) => !selectedIds.has(t.id));
+      for (const id of selectedIds) disposeMonarcEngine(id);
       
       // Update active track: if the active track was deleted, promote the nearest remaining track
       let newActiveTrackId = state.activeTrackId;
