@@ -19,6 +19,13 @@ interface VoiceOptions {
   durationSecs?: number;
 }
 
+// Release tail (seconds) applied after a voice's hold period ends.
+const RELEASE_SECS = 0.08;
+
+// How long a preview note rings when nothing else releases it (piano-roll
+// click, key click). Without this the oscillator would sound forever.
+const PREVIEW_HOLD_SECS = 1.5;
+
 function startVoice(
   ctx: AudioContext,
   destination: AudioNode,
@@ -32,19 +39,15 @@ function startVoice(
   const gain = ctx.createGain();
   const peak = (velocity / 127) * 0.25;
   const when = options.when ?? ctx.currentTime;
+  const duration = options.durationSecs ?? PREVIEW_HOLD_SECS;
   gain.gain.setValueAtTime(0.0001, when);
   gain.gain.exponentialRampToValueAtTime(Math.max(0.0001, peak), when + 0.01);
-  const duration = options.durationSecs;
-  if (duration !== undefined) {
-    gain.gain.setValueAtTime(Math.max(0.0001, peak), when + duration);
-    gain.gain.exponentialRampToValueAtTime(0.0001, when + duration + 0.08);
-  }
+  gain.gain.setValueAtTime(Math.max(0.0001, peak), when + duration);
+  gain.gain.exponentialRampToValueAtTime(0.0001, when + duration + RELEASE_SECS);
   osc.connect(gain);
   gain.connect(destination);
   osc.start(when);
-  if (duration !== undefined) {
-    osc.stop(when + duration + 0.1);
-  }
+  osc.stop(when + duration + RELEASE_SECS + 0.02);
   return { osc, gain };
 }
 
