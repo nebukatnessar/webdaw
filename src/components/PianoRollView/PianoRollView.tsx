@@ -6,7 +6,8 @@ import { useTransportStore, usePixelsPerBeat } from '../../store/transportStore'
 import { BEATS_PER_BAR, MIN_TOTAL_BARS, TIMELINE_MARGIN_BARS } from '../../constants';
 import * as engine from '../../audio/engine';
 import { startNotePreview, stopNotePreview } from '../../audio/midiSynth';
-import type { MidiNote } from '../../types/daw';
+import { SYNTH_LABELS, type SynthId } from '../../audio/workletSynth';
+import type { MidiNote, SynthId as TrackSynthId } from '../../types/daw';
 
 // Piano roll editor for MIDI note editing (feature #26, tasks #63/#64).
 // The grid is rendered on a canvas: horizontal axis is beats (shared zoom
@@ -151,12 +152,14 @@ export default function PianoRollView() {
     return null;
   }, [trackNotes]);
 
+  const trackSynth: TrackSynthId = tracks.find((t) => t.id === trackId)?.synth ?? 'base';
+
   const previewNote = useCallback((pitch: number, velocity = 100, key?: string) => {
     if (!trackId) return;
     const dest = engine.getTrackDestination(trackId);
     if (!dest) return;
-    startNotePreview(engine.getAudioContext(), dest, { pitch, velocity }, key ?? `pitch-${pitch}-${Date.now()}`);
-  }, [trackId]);
+    startNotePreview(engine.getAudioContext(), dest, trackSynth, { pitch, velocity }, key ?? `pitch-${pitch}-${Date.now()}`);
+  }, [trackId, trackSynth]);
 
   const ensureAudio = useCallback(() => {
     void engine.resumeContext();
@@ -393,7 +396,7 @@ export default function PianoRollView() {
       window.removeEventListener('keyup', onKeyUp, true);
       window.removeEventListener('keydown', onDelete, true);
     };
-  }, [basePitch, trackId, selectedNoteIds, gridDivisionBeats, ensureAudio, previewNote, removeNotes, midiUndo, midiRedo, moveNotes]);
+  }, [basePitch, trackId, trackSynth, selectedNoteIds, gridDivisionBeats, ensureAudio, previewNote, removeNotes, midiUndo, midiRedo, moveNotes]);
 
   // Canvas rendering
   useEffect(() => {
@@ -554,6 +557,20 @@ export default function PianoRollView() {
           {tracks.length === 0 && <option value="">No tracks</option>}
           {tracks.map((t) => (
             <option key={t.id} value={t.id}>{t.name}</option>
+          ))}
+        </select>
+        <span>Sound:</span>
+        <select
+          value={trackSynth}
+          onChange={(e) => {
+            if (trackId) useTrackStore.getState().updateTrack(trackId, { synth: e.target.value as SynthId });
+          }}
+          disabled={!trackId}
+          aria-label="Track synth"
+          title="Synth prototype used for this track's MIDI notes"
+        >
+          {(Object.keys(SYNTH_LABELS) as SynthId[]).map((id) => (
+            <option key={id} value={id}>{SYNTH_LABELS[id]}</option>
           ))}
         </select>
         <button

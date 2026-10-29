@@ -100,6 +100,10 @@ export interface MasterEffects {
 // track's effect rack, or the master chain.
 export type EffectsTarget = { kind: 'track'; trackId: string } | { kind: 'master' };
 
+// Synth prototype used to audition/play a track's MIDI notes (chosen at the
+// top of the piano roll). 'base' is the plain saw voice.
+export type SynthId = 'base' | 'monarch' | 'fm';
+
 
 export interface Track {
   id: string;
@@ -107,6 +111,7 @@ export interface Track {
   muted: boolean;
   soloed: boolean;
   armed: boolean;
+  synth?: SynthId;      // MIDI instrument for this track; absent = 'base'
   recordingMode?: 'layered' | 'multiTake';
   showAllTakes?: boolean;
   volume: number; // 0–1

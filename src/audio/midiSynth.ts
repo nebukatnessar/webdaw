@@ -1,23 +1,17 @@
-// Simple Web Audio synth used to audition MIDI notes in the piano roll and to
-// play them back during transport playback (feature #26). Each note becomes
-// an oscillator -> gain envelope -> the track's existing gain node, so track
-// volume/pan/mute/effects all apply to MIDI notes exactly like audio clips.
+// Synth voices for the piano roll (feature #26). Each track picks a synth
+// prototype (Track.synth); 'base' is a plain sawtooth rendered with native
+// nodes, while 'monarch' (additive) and 'fm' run inside the AudioWorklet
+// processor in public/worklets/synth-processor.js (see workletSynth.ts).
+// Every voice routes into the track's existing gain node, so track
+// volume/pan/mute/effects apply to MIDI notes exactly like audio clips.
 // This module is deliberately free of engine imports (the engine calls into
 // it); the audio context and per-track destinations are passed in.
-import type { MidiNote, Track } from '../types/daw';
+import type { MidiNote, SynthId, Track } from '../types/daw';
+import { startWorkletVoice, type WorkletVoice } from './workletSynth';
 
 export type TrackDestinationResolver = (trackId: string) => AudioNode | undefined;
 
 const midiToFreq = (pitch: number): number => 440 * Math.pow(2, (pitch - 69) / 12);
-
-// Live voices keyed by caller-supplied key (note id, or key-combo while a
-// computer-keyboard key is held), so note-off releases exactly that voice.
-const activeVoices = new Map<string, { osc: OscillatorNode; gain: GainNode }>();
-
-interface VoiceOptions {
-  when?: number;
-  durationSecs?: number;
-}
 
 // Release tail (seconds) applied after a voice's hold period ends.
 const RELEASE_SECS = 0.08;
@@ -26,13 +20,21 @@ const RELEASE_SECS = 0.08;
 // click, key click). Without this the oscillator would sound forever.
 const PREVIEW_HOLD_SECS = 1.5;
 
-function startVoice(
+interface Voice {
+  stop: () => void;
+}
+
+// Live voices keyed by caller-supplied key (note id, or key-combo while a
+// computer-keyboard key is held), so note-off releases exactly that voice.
+const activeVoices = new Map<string, Voice>();
+
+function startBaseVoice(
   ctx: AudioContext,
   destination: AudioNode,
   pitch: number,
   velocity: number,
-  options: VoiceOptions = {},
-): { osc: OscillatorNode; gain: GainNode } {
+  options: { when?: number; durationSecs?: number } = {},
+): Voice {
   const osc = ctx.createOscillator();
   osc.type = 'sawtooth';
   osc.frequency.value = midiToFreq(pitch);
@@ -48,7 +50,43 @@ function startVoice(
   gain.connect(destination);
   osc.start(when);
   osc.stop(when + duration + RELEASE_SECS + 0.02);
-  return { osc, gain };
+  return {
+    stop: () => {
+      try {
+        gain.gain.cancelScheduledValues(ctx.currentTime);
+        gain.gain.setValueAtTime(Math.max(0.0001, gain.gain.value), ctx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + RELEASE_SECS);
+        osc.stop(ctx.currentTime + RELEASE_SECS + 0.02);
+      } catch {
+        // already stopped naturally
+      }
+    },
+  };
+}
+
+function startSynthVoice(
+  ctx: AudioContext,
+  destination: AudioNode,
+  synth: SynthId,
+  pitch: number,
+  velocity: number,
+  options: { when?: number; durationSecs?: number } = {},
+): Voice {
+  if (synth === 'base') {
+    return startBaseVoice(ctx, destination, pitch, velocity, options);
+  }
+  // Worklet prototypes are async (module registration); fire and forget - the
+  // voice registers itself in activeVoices once created.
+  const holdSecs = options.durationSecs ?? PREVIEW_HOLD_SECS;
+  let workletVoice: WorkletVoice | null = null;
+  void startWorkletVoice(ctx, destination, synth, { pitch, velocity }, { holdSecs }).then((v) => {
+    workletVoice = v;
+  }).catch(() => undefined);
+  return {
+    stop: () => {
+      workletVoice?.stop();
+    },
+  };
 }
 
 /**
@@ -58,15 +96,13 @@ function startVoice(
 export function startNotePreview(
   ctx: AudioContext,
   destination: AudioNode,
+  synth: SynthId,
   note: Pick<MidiNote, 'pitch' | 'velocity'>,
   key: string,
 ): void {
   stopNotePreview(key);
-  const voice = startVoice(ctx, destination, note.pitch, note.velocity);
+  const voice = startSynthVoice(ctx, destination, synth, note.pitch, note.velocity);
   activeVoices.set(key, voice);
-  voice.osc.onended = () => {
-    if (activeVoices.get(key) === voice) activeVoices.delete(key);
-  };
 }
 
 /**
@@ -77,12 +113,7 @@ export function stopNotePreview(key: string): void {
   const voice = activeVoices.get(key);
   if (!voice) return;
   activeVoices.delete(key);
-  const ctx = voice.osc.context as AudioContext;
-  const now = ctx.currentTime;
-  voice.gain.gain.cancelScheduledValues(now);
-  voice.gain.gain.setValueAtTime(Math.max(0.0001, voice.gain.gain.value), now);
-  voice.gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.08);
-  voice.osc.stop(now + 0.1);
+  voice.stop();
 }
 
 export function stopAllNotePreviews(): void {
@@ -120,12 +151,12 @@ export function scheduleMidiPlayback(
 
     const when = now + Math.max(0, noteStartSecs - playheadSecs);
     const duration = note.durationBeats * beatsToSecs - Math.max(0, playheadSecs - noteStartSecs);
-    const voice = startVoice(ctx, destination, note.pitch, note.velocity, { when, durationSecs: duration });
+    const voice = startSynthVoice(ctx, destination, track.synth ?? 'base', note.pitch, note.velocity, {
+      when,
+      durationSecs: duration,
+    });
     const key = `playback-${note.id}-${when}`;
     activeVoices.set(key, voice);
-    voice.osc.onended = () => {
-      if (activeVoices.get(key) === voice) activeVoices.delete(key);
-    };
   }
 }
 
