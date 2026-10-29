@@ -1,7 +1,8 @@
 // Synth voices for the piano roll (feature #26). Each track picks a synth
-// prototype (Track.synth); 'base' is a plain sawtooth rendered with native
-// nodes, while 'monarch' (additive) and 'fm' run inside the AudioWorklet
-// processor in public/worklets/synth-processor.js (see workletSynth.ts).
+// prototype (Track.synth): 'base' is a plain sawtooth and 'monarch' is the
+// webMonarc MonarcEngine, both rendered with native nodes on the main thread;
+// 'fm' runs inside the AudioWorklet processor in
+// public/worklets/synth-processor.js (see workletSynth.ts).
 // Every voice routes into the track's existing gain node, so track
 // volume/pan/mute/effects apply to MIDI notes exactly like audio clips.
 // This module is deliberately free of engine imports (the engine calls into

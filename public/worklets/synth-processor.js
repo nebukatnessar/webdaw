@@ -4,9 +4,9 @@
 // touches audio-rate code.
 //
 // Registered name: 'webdaw-synth'. Synth prototypes:
-//   'base'    - single sawtooth (current default sound)
-//   'monarch' - additive stack of harmonics 1-8 with a slow-decaying spectrum
 //   'fm'      - classic 2-operator FM (carrier + modulator, ratio 1:2)
+// ('base' is a native-node saw and 'monarch' is the webMonarc MonarcEngine,
+// both rendered on the main thread - see src/audio/midiSynth.ts.)
 
 class WebdawSynthProcessor extends AudioWorkletProcessor {
   constructor() {
@@ -26,13 +26,11 @@ class WebdawSynthProcessor extends AudioWorkletProcessor {
         else if (m.name === 'velocity') this.velocity = m.value;
         else if (m.name === 'gate') this.gate = m.value ? 1 : 0;
         else if (m.name === 'modIndex') this.modIndex = m.value;
-        else if (m.name === 'harmonicDecay') this.harmonicDecay = m.value;
       } else if (m.type === 'noteoff') {
         this.gate = 0;
       }
     };
     this.modIndex = 3;
-    this.harmonicDecay = 0.6;
   }
 
   // Simple saw with anti-aliased-ish polyBLEP-ish smoothing via phase wrap
@@ -63,11 +61,6 @@ class WebdawSynthProcessor extends AudioWorkletProcessor {
       if (this.synth === 'fm') {
         const mod = Math.sin(2 * Math.PI * this.modPhase) * this.modIndex;
         s = Math.sin(2 * Math.PI * this.phase + mod);
-      } else if (this.synth === 'monarch') {
-        for (let h = 1; h <= 8; h++) {
-          s += (Math.sin(2 * Math.PI * this.phase * h) / h) * Math.pow(this.harmonicDecay, h - 1);
-        }
-        s *= 0.5;
       } else {
         s = this.saw(this.phase);
       }
