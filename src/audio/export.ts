@@ -4,6 +4,8 @@ import type { CompressorSettings, GateSettings, Track, Project } from '../types/
 import { createAndConfigureCompressor, getDefaultCompressorSettings } from './compressor';
 import { createAndConfigureGate, getDefaultGateSettings } from './gate';
 import { getAudibleClips } from './takes';
+import { renderMidiToOfflineContext } from './midiSynth';
+import { useMidiStore } from '../store/midiStore';
 
 export interface ExportOptions {
   sampleRate?: number;
@@ -115,19 +117,25 @@ export async function exportProjectAsWAV(
   const { tracks, bpm } = project;
   
   const hasSoloed = tracks.some((t) => t.soloed);
+  const midiNotes = useMidiStore.getState().notes;
   const tracksToExport = hasSoloed
-    ? tracks.filter((t) => t.soloed && t.clips.length > 0)
-    : tracks.filter((t) => !t.muted && t.clips.length > 0 && !t.soloed);
-  
+    ? tracks.filter((t) => t.soloed && (t.clips.length > 0 || midiNotes.some((n) => n.trackId === t.id)))
+    : tracks.filter((t) => !t.muted && (t.clips.length > 0 || midiNotes.some((n) => n.trackId === t.id)) && !t.soloed);
+
   if (tracksToExport.length === 0) {
     throw new Error('No tracks to export');
   }
-  
+
   const beatsToSecs = 60 / bpm;
   let maxEndBeat = 0;
   for (const track of tracksToExport) {
     for (const clip of track.clips) {
       const endBeat = clip.startBeat + clip.durationBeats;
+      if (endBeat > maxEndBeat) maxEndBeat = endBeat;
+    }
+    for (const note of midiNotes) {
+      if (note.trackId !== track.id) continue;
+      const endBeat = note.startBeat + note.durationBeats;
       if (endBeat > maxEndBeat) maxEndBeat = endBeat;
     }
   }
@@ -189,7 +197,10 @@ export async function exportProjectAsWAV(
       if (durationSecs > 0) source.start(clipStartSecs, offsetSecs, durationSecs);
     }
   }
-  
+
+  // MIDI notes from the piano roll render into the same offline mix
+  renderMidiToOfflineContext(offlineCtx, tracks, midiNotes, bpm, masterGain);
+
   const renderedBuffer = await offlineCtx.startRendering();
   const blob = encodeWav(renderedBuffer, sampleRate);
 

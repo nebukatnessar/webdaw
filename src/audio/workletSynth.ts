@@ -54,13 +54,19 @@ export async function startWorkletVoice(
 ): Promise<WorkletVoice> {
   await ensureSynthWorkletRegistered(ctx);
   const node = new AudioWorkletNode(ctx, PROCESSOR_NAME, { outputChannelCount: [1] });
-  node.port.postMessage({ type: 'param', name: 'synth', value: synth });
-  node.port.postMessage({ type: 'param', name: 'frequency', value: midiToFreq(note.pitch) });
-  node.port.postMessage({ type: 'param', name: 'velocity', value: note.velocity / 127 });
-  node.port.postMessage({ type: 'param', name: 'gate', value: 1 });
   node.connect(destination);
+  // `when` is honored by delaying the gate-on message: the processor idles
+  // at env=0 until the gate arrives, so the note starts at the right time.
   const when = options.when ?? ctx.currentTime;
-  void when;
+  const delayMs = Math.max(0, (when - ctx.currentTime) * 1000);
+  const sendGateOn = () => {
+    node.port.postMessage({ type: 'param', name: 'synth', value: synth });
+    node.port.postMessage({ type: 'param', name: 'frequency', value: midiToFreq(note.pitch) });
+    node.port.postMessage({ type: 'param', name: 'velocity', value: note.velocity / 127 });
+    node.port.postMessage({ type: 'param', name: 'gate', value: 1 });
+  };
+  if (delayMs > 0) window.setTimeout(sendGateOn, delayMs);
+  else sendGateOn();
   const holdSecs = options.holdSecs ?? 0;
   let stopped = false;
   const stop = () => {
@@ -74,7 +80,7 @@ export async function startWorkletVoice(
     }
   };
   if (holdSecs > 0) {
-    window.setTimeout(stop, holdSecs * 1000 + 120);
+    window.setTimeout(stop, delayMs + holdSecs * 1000 + 120);
   }
   return { node, stop };
 }

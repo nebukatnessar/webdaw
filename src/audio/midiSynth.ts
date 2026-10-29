@@ -97,18 +97,28 @@ function startSynthVoice(
     return startBaseVoice(ctx, destination, pitch, velocity, options);
   }
   if (synth === 'monarch' && options.trackId) {
-    // Monarc is a monophonic engine: one noteOn now, noteOff when the note's
-    // hold ends (previews) or when playback stops.
+    // Monarc is a monophonic engine: one noteOn at the note's start time,
+    // noteOff when its hold ends (previews) or when playback stops. A
+    // scheduled (future) start is delayed with a timer so the pitch change
+    // happens exactly when the note begins.
     const engine = getMonarcEngine(ctx, options.trackId, destination);
-    engine.noteOn(pitch, velocity / 127);
     const holdSecs = options.durationSecs ?? PREVIEW_HOLD_SECS;
-    let timer: number | null = null;
+    const when = options.when ?? ctx.currentTime;
+    const delayMs = Math.max(0, (when - ctx.currentTime) * 1000);
+    let onTimer: number | null = null;
+    let offTimer: number | null = null;
+    if (delayMs > 0) {
+      onTimer = window.setTimeout(() => engine.noteOn(pitch, velocity / 127), delayMs);
+    } else {
+      engine.noteOn(pitch, velocity / 127);
+    }
     if (options.durationSecs !== undefined) {
-      timer = window.setTimeout(() => engine.noteOff(pitch), holdSecs * 1000);
+      offTimer = window.setTimeout(() => engine.noteOff(pitch), delayMs + holdSecs * 1000);
     }
     return {
       stop: () => {
-        if (timer !== null) window.clearTimeout(timer);
+        if (onTimer !== null) window.clearTimeout(onTimer);
+        if (offTimer !== null) window.clearTimeout(offTimer);
         engine.noteOff(pitch);
       },
     };
@@ -177,7 +187,11 @@ export function scheduleMidiPlayback(
   const beatsToSecs = 60 / bpm;
   const playheadSecs = playheadBeats * beatsToSecs;
 
-  for (const note of notes) {
+  // Sort by start so notes sound in timeline order (relevant for the
+  // monophonic Monarc engine: the last-scheduled note wins the voice).
+  const ordered = [...notes].sort((a, b) => a.startBeat - b.startBeat);
+
+  for (const note of ordered) {
     const track = tracks.find((t) => t.id === note.trackId);
     if (!track) continue;
     const destination = resolveDestination(track.id);
@@ -197,6 +211,59 @@ export function scheduleMidiPlayback(
     });
     const key = `playback-${note.id}-${when}`;
     activeVoices.set(key, voice);
+  }
+}
+
+/**
+ * Render MIDI notes into an OfflineAudioContext (WAV export). Mirrors
+ * scheduleMidiPlayback but schedules from beat 0 with no playhead, using a
+ * throwaway per-track chain (gain -> panner -> master) shaped like the live
+ * one. Only 'base' and 'fm' voices are supported here; 'monarch' (the
+ * stateful MonarcEngine) is skipped in exports for now.
+ */
+export function renderMidiToOfflineContext(
+  offlineCtx: OfflineAudioContext,
+  tracks: Track[],
+  notes: MidiNote[],
+  bpm: number,
+  masterGain: AudioNode,
+): void {
+  const beatsToSecs = 60 / bpm;
+  const chains = new Map<string, { gain: GainNode; panner: StereoPannerNode }>();
+  const hasSoloed = tracks.some((t) => t.soloed);
+
+  for (const note of notes) {
+    const track = tracks.find((t) => t.id === note.trackId);
+    if (!track) continue;
+    if (track.muted || (hasSoloed && !track.soloed)) continue;
+    const synth = track.synth ?? 'base';
+    if (synth === 'monarch') continue;
+
+    let chain = chains.get(track.id);
+    if (!chain) {
+      const gain = offlineCtx.createGain();
+      gain.gain.value = track.volume;
+      const panner = offlineCtx.createStereoPanner();
+      panner.pan.value = track.pan;
+      gain.connect(panner);
+      panner.connect(masterGain);
+      chain = { gain, panner };
+      chains.set(track.id, chain);
+    }
+
+    const when = note.startBeat * beatsToSecs;
+    const durationSecs = note.durationBeats * beatsToSecs;
+    if (synth === 'fm') {
+      void startWorkletVoice(offlineCtx as unknown as AudioContext, chain.gain, 'fm', {
+        pitch: note.pitch,
+        velocity: note.velocity,
+      }, { when, holdSecs: durationSecs }).catch(() => undefined);
+    } else {
+      startBaseVoice(offlineCtx as unknown as AudioContext, chain.gain, note.pitch, note.velocity, {
+        when,
+        durationSecs,
+      });
+    }
   }
 }
 
