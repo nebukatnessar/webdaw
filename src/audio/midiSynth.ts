@@ -10,6 +10,7 @@
 import type { MidiNote, SynthId, Track } from '../types/daw';
 import { startWorkletVoice, type WorkletVoice } from './workletSynth';
 import { MonarcEngine } from './monarcEngine';
+import { DEFAULT_MONARC_PARAMS, type MonarcParams } from '../types/daw';
 
 export type TrackDestinationResolver = (trackId: string) => AudioNode | undefined;
 
@@ -71,13 +72,34 @@ function startBaseVoice(
 // lazily on first use, keyed by track id, and torn down when the track is gone.
 const monarcEngines = new Map<string, MonarcEngine>();
 
-function getMonarcEngine(ctx: AudioContext, trackId: string, destination: AudioNode): MonarcEngine {
+function getMonarcEngine(ctx: AudioContext, trackId: string, destination: AudioNode, params?: Partial<MonarcParams>): MonarcEngine {
   let engine = monarcEngines.get(trackId);
   if (!engine) {
     engine = new MonarcEngine({ context: ctx, destination });
     monarcEngines.set(trackId, engine);
+    // Apply stored/default params once at creation
+    const merged = { ...DEFAULT_MONARC_PARAMS, ...params };
+    for (const [name, value] of Object.entries(merged)) {
+      engine.setParam(name, value as number | OscillatorType);
+    }
   }
   return engine;
+}
+
+/**
+ * Push a Monarc parameter change to the track's live engine (if one exists),
+ * so knob tweaks are audible immediately, and return the merged param set.
+ */
+export function applyMonarcParam(
+  ctx: AudioContext,
+  trackId: string,
+  destination: AudioNode,
+  name: string,
+  value: number | OscillatorType,
+  params?: Partial<MonarcParams>,
+): void {
+  const engine = getMonarcEngine(ctx, trackId, destination, params);
+  engine.setParam(name, value);
 }
 
 export function disposeMonarcEngine(trackId: string): void {
@@ -91,7 +113,7 @@ function startSynthVoice(
   synth: SynthId,
   pitch: number,
   velocity: number,
-  options: { when?: number; durationSecs?: number; trackId?: string } = {},
+  options: { when?: number; durationSecs?: number; trackId?: string; monarcParams?: Partial<MonarcParams> } = {},
 ): Voice {
   if (synth === 'base') {
     return startBaseVoice(ctx, destination, pitch, velocity, options);
@@ -101,7 +123,7 @@ function startSynthVoice(
     // noteOff when its hold ends (previews) or when playback stops. A
     // scheduled (future) start is delayed with a timer so the pitch change
     // happens exactly when the note begins.
-    const engine = getMonarcEngine(ctx, options.trackId, destination);
+    const engine = getMonarcEngine(ctx, options.trackId, destination, options.monarcParams);
     const holdSecs = options.durationSecs ?? PREVIEW_HOLD_SECS;
     const when = options.when ?? ctx.currentTime;
     const delayMs = Math.max(0, (when - ctx.currentTime) * 1000);
@@ -148,9 +170,10 @@ export function startNotePreview(
   note: Pick<MidiNote, 'pitch' | 'velocity'>,
   key: string,
   trackId?: string,
+  monarcParams?: Partial<MonarcParams>,
 ): void {
   stopNotePreview(key);
-  const voice = startSynthVoice(ctx, destination, synth, note.pitch, note.velocity, { trackId });
+  const voice = startSynthVoice(ctx, destination, synth, note.pitch, note.velocity, { trackId, monarcParams });
   activeVoices.set(key, voice);
 }
 
@@ -208,6 +231,7 @@ export function scheduleMidiPlayback(
       when,
       durationSecs: duration,
       trackId: track.id,
+      monarcParams: track.monarcParams,
     });
     const key = `playback-${note.id}-${when}`;
     activeVoices.set(key, voice);

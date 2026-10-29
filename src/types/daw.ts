@@ -104,6 +104,49 @@ export type EffectsTarget = { kind: 'track'; trackId: string } | { kind: 'master
 // top of the piano roll). 'base' is the plain saw voice.
 export type SynthId = 'base' | 'monarch' | 'fm';
 
+// Editable Monarc (webMonarc) engine parameters, stored per track. Keys match
+// MonarcEngine.setParam names; defaults mirror the webMonarc prototype's UI.
+export interface MonarcParams {
+  master: number;        // 0..1
+  cutoff: number;        // Hz 40..12000
+  resonance: number;     // Q 0.1..20
+  filterEnv: number;     // Hz 0..8000
+  glide: number;         // s 0..1
+  ampAttack: number;     // s
+  ampDecay: number;      // s
+  ampSustain: number;    // 0..1
+  ampRelease: number;    // s
+  filterAttack: number;  // s
+  filterDecay: number;   // s
+  filterSustain: number; // 0..1
+  filterRelease: number; // s
+  osc1Level: number;     // 0..1
+  osc2Level: number;     // 0..1
+  osc3Level: number;     // 0..1
+  osc1Wave: OscillatorType;
+  osc2Wave: OscillatorType;
+  osc3Wave: OscillatorType;
+  osc2Detune: number;    // cents -50..50
+  osc2Ratio: number;     // 0.25..4
+  osc3Ratio: number;     // 0.25..4
+  subLevel: number;      // 0..1
+  subWave: OscillatorType;
+  drive: number;         // 0..1
+}
+
+export const DEFAULT_MONARC_PARAMS: MonarcParams = {
+  master: 0.7,
+  cutoff: 350, resonance: 12, filterEnv: 4500,
+  glide: 0.05,
+  ampAttack: 0.002, ampDecay: 0.35, ampSustain: 0.65, ampRelease: 0.3,
+  filterAttack: 0.001, filterDecay: 0.3, filterSustain: 0.12, filterRelease: 0.35,
+  osc1Level: 1, osc2Level: 0.55, osc3Level: 0.35,
+  osc1Wave: 'sawtooth', osc2Wave: 'sawtooth', osc3Wave: 'square',
+  osc2Detune: 8, osc2Ratio: 1, osc3Ratio: 0.5,
+  subLevel: 0.75, subWave: 'sine',
+  drive: 0.35,
+};
+
 
 export interface Track {
   id: string;
@@ -112,6 +155,7 @@ export interface Track {
   soloed: boolean;
   armed: boolean;
   synth?: SynthId;      // MIDI instrument for this track; absent = 'base'
+  monarcParams?: Partial<MonarcParams>; // Monarc knob values; absent = defaults
   recordingMode?: 'layered' | 'multiTake';
   showAllTakes?: boolean;
   volume: number; // 0–1

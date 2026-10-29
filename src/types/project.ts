@@ -43,6 +43,7 @@ export interface SerializedTrack {
   pan: number;    // -1 to 1
   color: string;
   synth?: string; // 'base' | 'monarch' | 'fm'; absent in older projects
+  monarcParams?: Record<string, number | string>; // Monarc knob values; absent = defaults
   recordingMode?: 'layered' | 'multiTake';
   showAllTakes?: boolean;
   clips: SerializedClip[];

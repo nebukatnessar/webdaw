@@ -7,6 +7,7 @@ import { BEATS_PER_BAR, MIN_TOTAL_BARS, TIMELINE_MARGIN_BARS } from '../../const
 import * as engine from '../../audio/engine';
 import { startNotePreview, stopNotePreview } from '../../audio/midiSynth';
 import { SYNTH_LABELS, type SynthId } from '../../audio/workletSynth';
+import SynthPanel from './SynthPanel';
 import type { MidiNote, SynthId as TrackSynthId } from '../../types/daw';
 
 // Piano roll editor for MIDI note editing (feature #26, tasks #63/#64).
@@ -107,6 +108,7 @@ export default function PianoRollView() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [kbScrollTop, setKbScrollTop] = useState(0);
   const [tool, setTool] = useState<Tool>('draw');
+  const [showSynthPanel, setShowSynthPanel] = useState(false);
   const [drag, setDrag] = useState<DragState>(null);
   const [basePitch, setBasePitch] = useState(60);
   const [heldKeys, setHeldKeys] = useState<Set<string>>(new Set());
@@ -154,12 +156,14 @@ export default function PianoRollView() {
 
   const trackSynth: TrackSynthId = tracks.find((t) => t.id === trackId)?.synth ?? 'base';
 
+  const trackMonarcParams = tracks.find((t) => t.id === trackId)?.monarcParams;
+
   const previewNote = useCallback((pitch: number, velocity = 100, key?: string) => {
     if (!trackId) return;
     const dest = engine.getTrackDestination(trackId);
     if (!dest) return;
-    startNotePreview(engine.getAudioContext(), dest, trackSynth, { pitch, velocity }, key ?? `pitch-${pitch}-${Date.now()}`, trackId);
-  }, [trackId, trackSynth]);
+    startNotePreview(engine.getAudioContext(), dest, trackSynth, { pitch, velocity }, key ?? `pitch-${pitch}-${Date.now()}`, trackId, trackMonarcParams);
+  }, [trackId, trackSynth, trackMonarcParams]);
 
   const ensureAudio = useCallback(() => {
     void engine.resumeContext();
@@ -596,9 +600,24 @@ export default function PianoRollView() {
         </button>
         <span>{isSnapEnabled ? `Snap: 1/${gridDivisionBeats === 4 ? '1' : String(4 / gridDivisionBeats * 4)}` : 'Snap: off'}</span>
         <span>Keys: A–K play notes, Z/X octave</span>
+        <button
+          className={showSynthPanel ? styles.toolActive : ''}
+          onClick={() => setShowSynthPanel((v) => !v)}
+          disabled={!trackId}
+          title="Show/hide the synth parameter panel for this track"
+        >
+          🎛️ Synth
+        </button>
         <span className={styles.spacer} />
         <span>Alt+scroll to zoom</span>
       </div>
+      {showSynthPanel && trackId && (
+        <SynthPanel
+          trackId={trackId}
+          synth={trackSynth}
+          params={tracks.find((t) => t.id === trackId)?.monarcParams ?? {}}
+        />
+      )}
       <div className={styles.body}>
         <div className={styles.keyboard} style={{ height: '100%' }}>
           <div style={{ transform: `translateY(${-kbScrollTop}px)`, position: 'absolute', top: 0, left: 0, right: 0 }}>
