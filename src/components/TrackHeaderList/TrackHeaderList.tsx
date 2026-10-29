@@ -14,6 +14,7 @@ import EffectsDialog from '../EffectsDialog/EffectsDialog';
 interface Props {
   scrollRef: RefObject<HTMLDivElement | null>;
   onScroll: (e: React.UIEvent<HTMLDivElement>) => void;
+  onOpenPianoRoll?: (trackId: string) => void;
 }
 
 function formatPan(pan: number): string {
@@ -22,7 +23,7 @@ function formatPan(pan: number): string {
   return pan < 0 ? `${pct}L` : `${pct}R`;
 }
 
-export default function TrackHeaderList({ scrollRef, onScroll }: Props) {
+export default function TrackHeaderList({ scrollRef, onScroll, onOpenPianoRoll }: Props) {
   const { tracks, updateTrack, selectedTrackIds, selectedClipIds, activeTrackId, selectTrack, addTrack } = useTrackStore();
   const selectTake = useTrackStore((s) => s.selectTake);
   const createTakeComp = useTrackStore((s) => s.createTakeComp);
@@ -170,7 +171,14 @@ export default function TrackHeaderList({ scrollRef, onScroll }: Props) {
   const handleRowClick = (e: React.MouseEvent, trackId: string) => {
     // Ignore clicks on buttons (they handle their own logic)
     if ((e.target as HTMLElement).closest('button')) return;
-    
+
+    // Double-click on the row opens that track in the piano roll - the
+    // fastest way from a track to its MIDI editing UI.
+    if (e.detail >= 2 && onOpenPianoRoll) {
+      onOpenPianoRoll(trackId);
+      return;
+    }
+
     if (e.ctrlKey || e.metaKey) {
       selectTrack(trackId, 'toggle');
     } else if (e.shiftKey) {
@@ -278,6 +286,7 @@ export default function TrackHeaderList({ scrollRef, onScroll }: Props) {
               role="option"
               aria-selected={isSelected}
               aria-label={`Track ${track.name}`}
+              title={onOpenPianoRoll ? `${track.name} — double-click to open in piano roll` : track.name}
             >
               <div className={styles.rowMain}>
                 <span className={styles.colorSwatch} style={{ background: track.color }} />

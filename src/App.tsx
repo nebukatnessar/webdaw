@@ -10,6 +10,7 @@ import { useTransportStore } from './store/transportStore';
 import Toast from './components/Toast/Toast';
 import ProgressModal from './components/ProgressModal/ProgressModal';
 import PianoRollView from './components/PianoRollView/PianoRollView';
+import { useMidiStore } from './store/midiStore';
 import { handleKeyDown } from './keyboard/keyboardShortcuts';
 
 // Which lower workspace panel is shown: the arrange timeline or the MIDI
@@ -199,11 +200,21 @@ function App() {
           </button>
         </div>
       )}
-      <TransportBar onTogglePianoRoll={() => setViewMode((v) => (v === 'arrange' ? 'pianoRoll' : 'arrange'))} pianoRollActive={viewMode === 'pianoRoll'} />
+      <TransportBar
+        onTogglePianoRoll={() => setViewMode((v) => (v === 'arrange' ? 'pianoRoll' : 'arrange'))}
+        pianoRollActive={viewMode === 'pianoRoll'}
+      />
       <div className={styles.workspace}>
         {viewMode === 'arrange' ? (
           <>
-            <TrackHeaderList scrollRef={headerRef} onScroll={onHeaderScroll} />
+            <TrackHeaderList
+              scrollRef={headerRef}
+              onScroll={onHeaderScroll}
+              onOpenPianoRoll={(trackId) => {
+                useMidiStore.getState().setPianoRollTrackId(trackId);
+                setViewMode('pianoRoll');
+              }}
+            />
             <ArrangeView scrollRef={arrangeRef} onScroll={onArrangeScroll} />
             <MasterFader />
           </>

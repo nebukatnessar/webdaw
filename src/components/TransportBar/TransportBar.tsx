@@ -630,7 +630,7 @@ export default function TransportBar({ onTogglePianoRoll, pianoRollActive = fals
           onClick={onTogglePianoRoll}
           disabled={!onTogglePianoRoll}
           aria-label="Toggle piano roll"
-          title="Toggle the MIDI piano roll editor"
+          title="Toggle the MIDI piano roll editor (double-click a track header to jump straight to its notes)"
         >
           🎹 Piano Roll
         </button>
