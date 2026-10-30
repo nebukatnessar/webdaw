@@ -9,7 +9,7 @@
 // voice/tuning via port messages. One AudioWorkletNode per hit keeps
 // triggering polyphonic and click-free; classic drum-machine behavior (kick
 // retriggers, hats choke) is handled here.
-import type { DrumVoiceId, DrumVoiceParams } from '../types/daw';
+import type { DrumKitLane, DrumVoiceId, DrumVoiceParams } from '../types/daw';
 import { DEFAULT_DRUM_PARAMS } from '../types/daw';
 
 export interface DrumEngineOptions {
@@ -57,11 +57,18 @@ interface Hit {
   voice: DrumVoiceId;
 }
 
+interface SampleHit {
+  source: AudioBufferSourceNode;
+  gain: GainNode;
+  chokeGroup: string | null;
+}
+
 export class DrumMachineEngine {
   readonly context: AudioContext;
   private readonly destination: AudioNode;
   private readonly params: Record<DrumVoiceId, DrumVoiceParams>;
   private readonly live: Hit[] = [];
+  private readonly sampleHits: SampleHit[] = [];
 
   constructor({ context, destination }: DrumEngineOptions, params?: Partial<Record<DrumVoiceId, Partial<DrumVoiceParams>>>) {
     this.context = context;
@@ -115,6 +122,46 @@ export class DrumMachineEngine {
     }, delayMs + (p.decay + 0.5) * 1000);
   }
 
+  /**
+   * Trigger a bundled sample one-shot (task #196). Playback runs through an
+   * AudioBufferSourceNode into a per-lane gain node, so per-lane gain and
+   * tuning (playbackRate detune) apply; `when` gives sample-accurate timing.
+   * Lanes sharing a chokeGroup stop each other's ringing hits immediately
+   * (e.g. a closed hat cuts an open hat).
+   */
+  triggerSample(lane: DrumKitLane, buffer: AudioBuffer, velocity = 1, when?: number): void {
+    const ctx = this.context;
+    this.resume();
+    if (lane.chokeGroup) this.chokeGroup(lane.chokeGroup);
+
+    const whenSecs = when ?? ctx.currentTime;
+    const source = ctx.createBufferSource();
+    source.buffer = buffer;
+    source.playbackRate.value = Math.pow(2, lane.tune / 12);
+    const gain = ctx.createGain();
+    gain.gain.value = lane.gain * Math.min(1, Math.max(0, velocity));
+    source.connect(gain);
+    gain.connect(this.destination);
+    source.start(whenSecs);
+
+    const hit: SampleHit = { source, gain, chokeGroup: lane.chokeGroup };
+    this.sampleHits.push(hit);
+    source.onended = () => {
+      try { gain.disconnect(); } catch { /* already torn down */ }
+      const idx = this.sampleHits.indexOf(hit);
+      if (idx !== -1) this.sampleHits.splice(idx, 1);
+    };
+  }
+
+  /** Immediately stop all ringing sample hits in a choke group. */
+  chokeGroup(group: string): void {
+    for (const hit of [...this.sampleHits]) {
+      if (hit.chokeGroup === group) {
+        try { hit.source.stop(); } catch { /* already stopped */ }
+      }
+    }
+  }
+
   /** Immediately choke (fast-release) all ringing voices of the given id. */
   choke(voice: DrumVoiceId): void {
     for (const hit of this.live) {
@@ -134,6 +181,9 @@ export class DrumMachineEngine {
 
   allNotesOff(): void {
     for (const voice of DRUM_VOICE_IDS) this.choke(voice);
+    for (const hit of [...this.sampleHits]) {
+      try { hit.source.stop(); } catch { /* already stopped */ }
+    }
   }
 
   dispose(): void {
@@ -142,5 +192,6 @@ export class DrumMachineEngine {
       try { hit.node.disconnect(); } catch { /* already torn down */ }
     }
     this.live.length = 0;
+    this.sampleHits.length = 0;
   }
 }

@@ -174,6 +174,26 @@ export const DEFAULT_DRUM_PARAMS: Record<DrumVoiceId, DrumVoiceParams> = {
   hihat: { tune: 0, decay: 0.06, tone: 0.8 },
 };
 
+// Sample-based drum lanes (feature #194, task #196): a closed set of bundled
+// factory kits (kit.json + WAV one-shots under public/kits/), no user file
+// loading in v1. Each lane maps to a GM-style MIDI pitch so the step grid and
+// the MIDI machinery address sample lanes exactly like synthesized voices.
+export interface DrumKitLane {
+  id: string;          // lane id, e.g. 'hihat-open'
+  label: string;
+  file: string;        // WAV file within the kit directory
+  pitch: number;       // MIDI note number addressing this lane
+  chokeGroup: string | null; // lanes sharing a group choke each other (open hat cut by closed hat)
+  gain: number;        // linear per-lane gain, 1 = unity
+  tune: number;        // playbackRate detune in semitones
+}
+
+export interface DrumKit {
+  id: string;
+  name: string;
+  lanes: DrumKitLane[];
+}
+
 export interface Track {
   id: string;
   name: string;
@@ -183,6 +203,7 @@ export interface Track {
   synth?: SynthId;      // MIDI instrument for this track; absent = 'base'
   monarcParams?: Partial<MonarcParams>; // Monarc knob values; absent = defaults
   drumParams?: Partial<Record<DrumVoiceId, Partial<DrumVoiceParams>>>; // drum machine voice tuning; absent = defaults
+  drumKitId?: string;  // bundled sample kit for 'drum' tracks; absent = synthesized voices only
   recordingMode?: 'layered' | 'multiTake';
   showAllTakes?: boolean;
   volume: number; // 0–1
