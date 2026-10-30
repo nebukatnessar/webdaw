@@ -12,72 +12,105 @@ const DEFAULT_GATE_SETTINGS: GateSettings = {
 
 export interface GateChain {
   input: GainNode;
-  processor: ScriptProcessorNode;
+  processor: AudioWorkletNode | null;
   output: GainNode;
   threshold: number;
   range: number;
   attack: number;
   hold: number;
   release: number;
-  gain: number;
-  holdFramesRemaining: number;
 }
 
 // Map to store gate chains per track
 const gateNodes = new Map<string, GateChain>();
 
+const WORKLET_URL_PATH = 'worklets/gate-processor.js';
+const PROCESSOR_NAME = 'webdaw-gate';
+
+// Module registration is per-context (a new OfflineAudioContext needs its own
+// addModule call), so cache the registration promise per context.
+const registrationPromises = new WeakMap<BaseAudioContext, Promise<void>>();
+const registeredContexts = new WeakSet<BaseAudioContext>();
+
+/**
+ * Registers the gate worklet module with the given context exactly once per
+ * context. Must be awaited before creating worklet-based gate nodes on a
+ * context (createAndConfigureGate does this; getOrCreateGateNode upgrades
+ * asynchronously instead).
+ */
+export function ensureGateWorkletRegistered(ctx: BaseAudioContext): Promise<void> {
+  let promise = registrationPromises.get(ctx);
+  if (!promise) {
+    const url = `${import.meta.env.BASE_URL}${WORKLET_URL_PATH}`;
+    promise = ctx.audioWorklet.addModule(url).then(() => {
+      registeredContexts.add(ctx);
+    }).catch((e) => {
+      registrationPromises.delete(ctx);
+      throw e;
+    });
+    registrationPromises.set(ctx, promise);
+  }
+  return promise;
+}
+
+function pushSettings(chain: GateChain): void {
+  const node = chain.processor;
+  if (!node) return;
+  node.port.postMessage({ type: 'param', name: 'threshold', value: chain.threshold });
+  node.port.postMessage({ type: 'param', name: 'range', value: chain.range });
+  node.port.postMessage({ type: 'param', name: 'attack', value: chain.attack });
+  node.port.postMessage({ type: 'param', name: 'hold', value: chain.hold });
+  node.port.postMessage({ type: 'param', name: 'release', value: chain.release });
+}
+
+// Route input -> worklet -> output, replacing the direct passthrough. The
+// processor's gain starts at 1 (open), matching the passthrough level, so
+// the swap is click-free.
+function attachWorklet(ctx: BaseAudioContext, chain: GateChain): void {
+  if (chain.processor || !registeredContexts.has(ctx)) return;
+  const node = new AudioWorkletNode(ctx, PROCESSOR_NAME, {
+    numberOfInputs: 1,
+    numberOfOutputs: 1,
+    channelCount: 2,
+    channelCountMode: 'explicit',
+    channelInterpretation: 'speakers',
+    outputChannelCount: [2],
+  });
+  chain.input.disconnect(chain.output);
+  chain.input.connect(node);
+  node.connect(chain.output);
+  chain.processor = node;
+  pushSettings(chain);
+}
+
 function createGateChain(ctx: BaseAudioContext): GateChain {
   const input = ctx.createGain();
-  const processor = ctx.createScriptProcessor(1024, 2, 2);
   const output = ctx.createGain();
 
   const chain: GateChain = {
     input,
-    processor,
+    processor: null,
     output,
-    threshold: 0,
-    range: 0,
-    attack: 0,
-    hold: 0,
-    release: 0,
-    gain: 1,
-    holdFramesRemaining: 0,
+    threshold: DEFAULT_GATE_SETTINGS.threshold,
+    range: DEFAULT_GATE_SETTINGS.range,
+    attack: DEFAULT_GATE_SETTINGS.attack,
+    hold: DEFAULT_GATE_SETTINGS.hold,
+    release: DEFAULT_GATE_SETTINGS.release,
   };
 
-  processor.onaudioprocess = (event) => {
-    const inputBuffer = event.inputBuffer;
-    const outputBuffer = event.outputBuffer;
-    const threshold = 10 ** (chain.threshold / 20);
-    const closedGain = 10 ** (chain.range / 20);
-    const attackFrames = Math.max(1, Math.round(chain.attack * ctx.sampleRate));
-    const releaseFrames = Math.max(1, Math.round(chain.release * ctx.sampleRate));
-    const holdFrames = Math.round(chain.hold * ctx.sampleRate);
+  if (registeredContexts.has(ctx)) {
+    attachWorklet(ctx, chain);
+  } else {
+    // Passthrough until the module is registered; swap in the worklet
+    // seamlessly once addModule resolves.
+    input.connect(output);
+    void ensureGateWorkletRegistered(ctx)
+      .then(() => attachWorklet(ctx, chain))
+      .catch(() => {
+        // Keep the passthrough if registration fails (e.g. old browser).
+      });
+  }
 
-    for (let frame = 0; frame < inputBuffer.length; frame += 1) {
-      let peak = 0;
-      for (let channel = 0; channel < inputBuffer.numberOfChannels; channel += 1) {
-        peak = Math.max(peak, Math.abs(inputBuffer.getChannelData(channel)[frame]));
-      }
-
-      if (peak >= threshold) {
-        chain.holdFramesRemaining = holdFrames;
-      } else if (chain.holdFramesRemaining > 0) {
-        chain.holdFramesRemaining -= 1;
-      }
-
-      const targetGain = peak >= threshold || chain.holdFramesRemaining > 0 ? 1 : closedGain;
-      const frames = targetGain > chain.gain ? attackFrames : releaseFrames;
-      chain.gain += (targetGain - chain.gain) / frames;
-
-      for (let channel = 0; channel < outputBuffer.numberOfChannels; channel += 1) {
-        outputBuffer.getChannelData(channel)[frame] =
-          inputBuffer.getChannelData(channel)[frame] * chain.gain;
-      }
-    }
-  };
-
-  input.connect(processor);
-  processor.connect(output);
   return chain;
 }
 
@@ -114,15 +147,19 @@ export function updateGateNode(
   chain.attack = settings.attack;
   chain.hold = settings.hold;
   chain.release = settings.release;
+  pushSettings(chain);
 }
 
 /**
- * Create and configure a gate with the given settings
+ * Create and configure a gate with the given settings. Awaits worklet module
+ * registration on the context, so this also works on a fresh
+ * OfflineAudioContext during export.
  */
-export function createAndConfigureGate(
+export async function createAndConfigureGate(
   ctx: BaseAudioContext,
   settings: GateSettings,
-): GateChain {
+): Promise<GateChain> {
+  await ensureGateWorkletRegistered(ctx);
   const chain = createGateChain(ctx);
   updateGateNode(chain, settings);
   return chain;
@@ -135,15 +172,19 @@ export function getDefaultGateSettings(): GateSettings {
   return { ...DEFAULT_GATE_SETTINGS };
 }
 
+function disconnectChain(chain: GateChain): void {
+  chain.input.disconnect();
+  chain.processor?.disconnect();
+  chain.output.disconnect();
+}
+
 /**
  * Clean up gate node for a track
  */
 export function cleanupGateNode(trackId: string): void {
   const chain = gateNodes.get(trackId);
   if (chain) {
-    chain.input.disconnect();
-    chain.processor.disconnect();
-    chain.output.disconnect();
+    disconnectChain(chain);
     gateNodes.delete(trackId);
   }
 }
@@ -153,9 +194,7 @@ export function cleanupGateNode(trackId: string): void {
  */
 export function cleanupAllGateNodes(): void {
   for (const [, chain] of gateNodes) {
-    chain.input.disconnect();
-    chain.processor.disconnect();
-    chain.output.disconnect();
+    disconnectChain(chain);
   }
   gateNodes.clear();
 }

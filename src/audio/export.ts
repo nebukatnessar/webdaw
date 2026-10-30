@@ -25,10 +25,10 @@ function createExportCompressor(
   return createAndConfigureCompressor(ctx, settings);
 }
 
-function createExportGate(
+async function createExportGate(
   ctx: OfflineAudioContext,
   settings: GateSettings,
-): ReturnType<typeof createAndConfigureGate> | null {
+): Promise<Awaited<ReturnType<typeof createAndConfigureGate>> | null> {
   if (!settings.enabled) return null;
   return createAndConfigureGate(ctx, settings);
 }
@@ -62,7 +62,7 @@ export async function exportTrackAsWAV(
   
   // Create gate if enabled
   const gateSettings = track.gate || getDefaultGateSettings();
-  const gate = createExportGate(offlineCtx, gateSettings);
+  const gate = await createExportGate(offlineCtx, gateSettings);
   
   // Create compressor if enabled
   const compressorSettings = track.compressor || getDefaultCompressorSettings();
@@ -161,7 +161,7 @@ export async function exportProjectAsWAV(
     
     // Create gate if enabled
     const gateSettings = track.gate || getDefaultGateSettings();
-    const gate = createExportGate(offlineCtx, gateSettings);
+    const gate = await createExportGate(offlineCtx, gateSettings);
     
     // Create compressor if enabled
     const compressorSettings = track.compressor || getDefaultCompressorSettings();
