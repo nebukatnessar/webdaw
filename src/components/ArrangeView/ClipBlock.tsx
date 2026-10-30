@@ -527,8 +527,9 @@ function drawWaveform(canvas: HTMLCanvasElement, buffer: AudioBuffer, clip: Clip
   if (!ctx) return;
 
   const { width, height } = canvas;
-  const channelData = buffer.getChannelData(0);
-  const totalSamples = channelData.length;
+  const channels: Float32Array[] = [];
+  for (let c = 0; c < buffer.numberOfChannels; c++) channels.push(buffer.getChannelData(c));
+  const totalSamples = channels[0]?.length ?? 0;
   const sampleRate = buffer.sampleRate;
 
   // Calculate the sample range for this clip's window
@@ -556,9 +557,11 @@ function drawWaveform(canvas: HTMLCanvasElement, buffer: AudioBuffer, clip: Clip
     const from = Math.min(samplePosStart, totalSamples - 1);
     const to = Math.max(from, Math.min(samplePosEnd, totalSamples));
     for (let s = from; s < Math.max(from + 1, to); s++) {
-      const v = channelData[s] ?? 0;
-      if (v > maxVal) maxVal = v;
-      if (v < minVal) minVal = v;
+      for (const ch of channels) {
+        const v = ch[s] ?? 0;
+        if (v > maxVal) maxVal = v;
+        if (v < minVal) minVal = v;
+      }
     }
     const yTop = mid * (1 - maxVal * gain);
     const yBot = mid * (1 - minVal * gain);
