@@ -119,28 +119,22 @@ function startSynthVoice(
     return startBaseVoice(ctx, destination, pitch, velocity, options);
   }
   if (synth === 'monarch' && options.trackId) {
-    // Monarc is a monophonic engine: one noteOn at the note's start time,
-    // noteOff when its hold ends (previews) or when playback stops. A
-    // scheduled (future) start is delayed with a timer so the pitch change
-    // happens exactly when the note begins.
+    // Monarc is a monophonic engine with its own amp/filter release envelopes:
+    // noteOn at the note's start time, noteOff when its hold ends (previews)
+    // or when playback stops. A scheduled (future) start is delayed with a
+    // timer so the pitch change happens exactly when the note begins.
+    // Previews (no durationSecs) always get a noteOff after PREVIEW_HOLD_SECS
+    // so a drawn/clicked note can never ring forever.
     const engine = getMonarcEngine(ctx, options.trackId, destination, options.monarcParams);
     const holdSecs = options.durationSecs ?? PREVIEW_HOLD_SECS;
     const when = options.when ?? ctx.currentTime;
     const delayMs = Math.max(0, (when - ctx.currentTime) * 1000);
-    let onTimer: number | null = null;
-    let offTimer: number | null = null;
-    if (delayMs > 0) {
-      onTimer = window.setTimeout(() => engine.noteOn(pitch, velocity / 127), delayMs);
-    } else {
-      engine.noteOn(pitch, velocity / 127);
-    }
-    if (options.durationSecs !== undefined) {
-      offTimer = window.setTimeout(() => engine.noteOff(pitch), delayMs + holdSecs * 1000);
-    }
+    const onTimer = window.setTimeout(() => engine.noteOn(pitch, velocity / 127), delayMs);
+    const offTimer = window.setTimeout(() => engine.noteOff(pitch), delayMs + holdSecs * 1000);
     return {
       stop: () => {
-        if (onTimer !== null) window.clearTimeout(onTimer);
-        if (offTimer !== null) window.clearTimeout(offTimer);
+        window.clearTimeout(onTimer);
+        window.clearTimeout(offTimer);
         engine.noteOff(pitch);
       },
     };

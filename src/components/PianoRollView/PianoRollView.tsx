@@ -150,13 +150,28 @@ export default function PianoRollView() {
     return { beat, pitch, y };
   }, [pixelsPerBeat, noteHeight]);
 
+  // Nearest note within a few px of the click, on any pitch row close to the
+  // clicked one - makes grabbing short/thin notes reliable.
   const hitNote = useCallback((beat: number, pitch: number): MidiNote | null => {
+    const rowTolerance = Math.max(1, Math.round(6 / noteHeight));
+    let best: MidiNote | null = null;
+    let bestDist = Infinity;
+    for (const n of trackNotes) {
+      if (beat < n.startBeat - 0.001 || beat > n.startBeat + n.durationBeats + 0.001) continue;
+      const dist = Math.abs(n.pitch - pitch);
+      if (dist <= rowTolerance && dist < bestDist) {
+        best = n;
+        bestDist = dist;
+      }
+    }
+    if (best) return best;
+    // Exact-row fallback (previous behavior)
     for (let i = trackNotes.length - 1; i >= 0; i--) {
       const n = trackNotes[i];
       if (pitch === n.pitch && beat >= n.startBeat && beat < n.startBeat + n.durationBeats) return n;
     }
     return null;
-  }, [trackNotes]);
+  }, [trackNotes, noteHeight]);
 
   const trackSynth: TrackSynthId = tracks.find((t) => t.id === trackId)?.synth ?? 'base';
 
@@ -226,20 +241,14 @@ export default function PianoRollView() {
     }
 
     if (hit) {
-      const nearRightEdge = beat > hit.startBeat + hit.durationBeats - (6 / pixelsPerBeat);
+      // Grab the note body to move it (in any tool), or its right edge to
+      // resize. Ctrl/Cmd toggles selection instead of dragging.
+      const nearRightEdge = beat > hit.startBeat + hit.durationBeats - Math.max(6 / pixelsPerBeat, 0.25 * hit.durationBeats);
       if (e.ctrlKey || e.metaKey) {
         selectNote(hit.id, true);
-      } else if (!selectedNoteIds.includes(hit.id)) {
-        selectNote(hit.id, false);
-      }
-      const ids = e.ctrlKey || e.metaKey
-        ? selectedNoteIds.includes(hit.id)
-          ? selectedNoteIds.filter((id) => id !== hit.id)
-          : [...selectedNoteIds, hit.id]
-        : selectedNoteIds.includes(hit.id)
-          ? selectedNoteIds
-          : [hit.id];
-      if (tool === 'select' || nearRightEdge) {
+      } else {
+        if (!selectedNoteIds.includes(hit.id)) selectNote(hit.id, false);
+        const ids = selectedNoteIds.includes(hit.id) ? selectedNoteIds : [hit.id];
         if (nearRightEdge) {
           setDrag({ mode: 'resize', noteId: hit.id, startBeat: hit.startBeat, currentBeat: beat });
         } else {
@@ -247,12 +256,8 @@ export default function PianoRollView() {
           for (const n of trackNotes) if (ids.includes(n.id)) originals.set(n.id, { startBeat: n.startBeat, pitch: n.pitch });
           setDrag({ mode: 'move', noteIds: ids, originals, deltaBeats: 0, deltaPitch: 0 });
         }
-      } else {
-        const originals = new Map<string, { startBeat: number; pitch: number }>();
-        for (const n of trackNotes) if (ids.includes(n.id)) originals.set(n.id, { startBeat: n.startBeat, pitch: n.pitch });
-        setDrag({ mode: 'move', noteIds: ids, originals, deltaBeats: 0, deltaPitch: 0 });
+        previewNote(hit.pitch, hit.velocity, `audition-${hit.id}`);
       }
-      previewNote(hit.pitch, hit.velocity, `audition-${hit.id}`);
     } else {
       clearSelectedNotes();
       if (tool === 'draw') {
@@ -307,7 +312,11 @@ export default function PianoRollView() {
         });
         previewNote(d.pitch, 100, `audition-${id}`);
       } else if (d.mode === 'move') {
-        moveNotes(d.noteIds, d.deltaBeats, d.deltaPitch);
+        // Only commit if the note actually moved; a plain click on a note is
+        // just a selection, not a zero-delta undo step.
+        if (d.deltaBeats !== 0 || d.deltaPitch !== 0) {
+          moveNotes(d.noteIds, d.deltaBeats, d.deltaPitch);
+        }
       } else if (d.mode === 'resize') {
         resizeNote(d.noteId, Math.max(minDuration, snapBeat(beat) - d.startBeat));
       } else if (d.mode === 'marquee') {
