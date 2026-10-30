@@ -10,6 +10,7 @@
 import type { MidiNote, SynthId, Track } from '../types/daw';
 import { startWorkletVoice, type WorkletVoice } from './workletSynth';
 import { MonarcEngine } from './monarcEngine';
+import { DrumMachineEngine, pitchToDrumVoice } from './drumMachine';
 import { DEFAULT_MONARC_PARAMS, type MonarcParams } from '../types/daw';
 
 export type TrackDestinationResolver = (trackId: string) => AudioNode | undefined;
@@ -107,13 +108,33 @@ export function disposeMonarcEngine(trackId: string): void {
   monarcEngines.delete(trackId);
 }
 
+// One DrumMachineEngine per track (feature #194): drum lanes are addressed by
+// GM-style pitch (see DRUM_LANE_PITCHES), so a track with synth 'drum' routes
+// its MIDI notes into the engine instead of a pitched synth. Created lazily
+// on first use, keyed by track id, torn down when the track is gone.
+const drumEngines = new Map<string, DrumMachineEngine>();
+
+function getDrumEngine(ctx: AudioContext, trackId: string, destination: AudioNode, drumParams?: Track['drumParams']): DrumMachineEngine {
+  let engine = drumEngines.get(trackId);
+  if (!engine) {
+    engine = new DrumMachineEngine({ context: ctx, destination }, drumParams);
+    drumEngines.set(trackId, engine);
+  }
+  return engine;
+}
+
+export function disposeDrumEngine(trackId: string): void {
+  drumEngines.get(trackId)?.dispose();
+  drumEngines.delete(trackId);
+}
+
 function startSynthVoice(
   ctx: AudioContext,
   destination: AudioNode,
   synth: SynthId,
   pitch: number,
   velocity: number,
-  options: { when?: number; durationSecs?: number; trackId?: string; monarcParams?: Partial<MonarcParams> } = {},
+  options: { when?: number; durationSecs?: number; trackId?: string; monarcParams?: Partial<MonarcParams>; drumParams?: Track['drumParams'] } = {},
 ): Voice {
   if (synth === 'base') {
     return startBaseVoice(ctx, destination, pitch, velocity, options);
@@ -138,6 +159,17 @@ function startSynthVoice(
         engine.noteOff(pitch);
       },
     };
+  }
+  if (synth === 'drum' && options.trackId) {
+    // Drum machine (feature #194): the note's pitch addresses a drum lane
+    // (DRUM_LANE_PITCHES). A drum hit is a one-shot, so duration is ignored;
+    // the `when` time gives sample-accurate, transport-synced triggering.
+    const drumVoice = pitchToDrumVoice(pitch);
+    if (drumVoice) {
+      const engine = getDrumEngine(ctx, options.trackId, destination, options.drumParams);
+      void engine.trigger(drumVoice, velocity / 127, options.when).catch(() => undefined);
+    }
+    return { stop: () => undefined };
   }
   // Worklet prototypes are async (module registration); fire and forget - the
   // voice registers itself in activeVoices once created.
@@ -165,9 +197,10 @@ export function startNotePreview(
   key: string,
   trackId?: string,
   monarcParams?: Partial<MonarcParams>,
+  drumParams?: Track['drumParams'],
 ): void {
   stopNotePreview(key);
-  const voice = startSynthVoice(ctx, destination, synth, note.pitch, note.velocity, { trackId, monarcParams });
+  const voice = startSynthVoice(ctx, destination, synth, note.pitch, note.velocity, { trackId, monarcParams, drumParams });
   activeVoices.set(key, voice);
 }
 
@@ -226,6 +259,7 @@ export function scheduleMidiPlayback(
       durationSecs: duration,
       trackId: track.id,
       monarcParams: track.monarcParams,
+      drumParams: track.drumParams,
     });
     const key = `playback-${note.id}-${when}`;
     activeVoices.set(key, voice);
@@ -236,8 +270,8 @@ export function scheduleMidiPlayback(
  * Render MIDI notes into an OfflineAudioContext (WAV export). Mirrors
  * scheduleMidiPlayback but schedules from beat 0 with no playhead, using a
  * throwaway per-track chain (gain -> panner -> master) shaped like the live
- * one. Only 'base' and 'fm' voices are supported here; 'monarch' (the
- * stateful MonarcEngine) is skipped in exports for now.
+ * one. Only 'base' and 'fm' voices are supported here; 'monarch' and 'drum'
+ * (stateful engines that need the live context) are skipped in exports for now.
  */
 export function renderMidiToOfflineContext(
   offlineCtx: OfflineAudioContext,
@@ -255,7 +289,7 @@ export function renderMidiToOfflineContext(
     if (!track) continue;
     if (track.muted || (hasSoloed && !track.soloed)) continue;
     const synth = track.synth ?? 'base';
-    if (synth === 'monarch') continue;
+    if (synth === 'monarch' || synth === 'drum') continue;
 
     let chain = chains.get(track.id);
     if (!chain) {
@@ -288,4 +322,5 @@ export function renderMidiToOfflineContext(
 export function stopAllMidiVoices(): void {
   stopAllNotePreviews();
   for (const engine of monarcEngines.values()) engine.allNotesOff();
+  for (const engine of drumEngines.values()) engine.allNotesOff();
 }

@@ -101,8 +101,9 @@ export interface MasterEffects {
 export type EffectsTarget = { kind: 'track'; trackId: string } | { kind: 'master' };
 
 // Synth prototype used to audition/play a track's MIDI notes (chosen at the
-// top of the piano roll). 'base' is the plain saw voice.
-export type SynthId = 'base' | 'monarch' | 'fm';
+// top of the piano roll). 'base' is the plain saw voice; 'drum' routes notes
+// through the drum machine engine (feature #194).
+export type SynthId = 'base' | 'monarch' | 'fm' | 'drum';
 
 // Editable Monarc (webMonarc) engine parameters, stored per track. Keys match
 // MonarcEngine.setParam names; defaults mirror the webMonarc prototype's UI.
@@ -148,6 +149,31 @@ export const DEFAULT_MONARC_PARAMS: MonarcParams = {
 };
 
 
+// Drum machine voices (feature #194, task #195): synthesized DSP voices
+// rendered by the AudioWorklet in public/worklets/drum-processor.js. Lanes of
+// the step sequencer (#197) map 1:1 onto these ids.
+export type DrumVoiceId = 'kick' | 'snare' | 'hihat';
+
+export const DRUM_LABELS: Record<DrumVoiceId, string> = {
+  kick: 'Kick',
+  snare: 'Snare',
+  hihat: 'Hi-Hat',
+};
+
+// Per-voice tunable parameters, sent to the worklet via its message port.
+// tune is in semitones, decay/tone in seconds / 0..1.
+export interface DrumVoiceParams {
+  tune: number;   // semitones -24..24
+  decay: number;  // seconds 0.02..2
+  tone: number;   // 0..1 (filter cutoff / character)
+}
+
+export const DEFAULT_DRUM_PARAMS: Record<DrumVoiceId, DrumVoiceParams> = {
+  kick: { tune: 0, decay: 0.35, tone: 0.5 },
+  snare: { tune: 0, decay: 0.2, tone: 0.6 },
+  hihat: { tune: 0, decay: 0.06, tone: 0.8 },
+};
+
 export interface Track {
   id: string;
   name: string;
@@ -156,6 +182,7 @@ export interface Track {
   armed: boolean;
   synth?: SynthId;      // MIDI instrument for this track; absent = 'base'
   monarcParams?: Partial<MonarcParams>; // Monarc knob values; absent = defaults
+  drumParams?: Partial<Record<DrumVoiceId, Partial<DrumVoiceParams>>>; // drum machine voice tuning; absent = defaults
   recordingMode?: 'layered' | 'multiTake';
   showAllTakes?: boolean;
   volume: number; // 0–1

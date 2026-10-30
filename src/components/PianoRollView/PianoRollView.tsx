@@ -178,12 +178,14 @@ export default function PianoRollView() {
 
   const trackMonarcParams = tracks.find((t) => t.id === trackId)?.monarcParams;
 
+  const trackDrumParams = tracks.find((t) => t.id === trackId)?.drumParams;
+
   const previewNote = useCallback((pitch: number, velocity = 100, key?: string) => {
     if (!trackId) return;
     const dest = engine.getTrackDestination(trackId);
     if (!dest) return;
-    startNotePreview(engine.getAudioContext(), dest, trackSynth, { pitch, velocity }, key ?? `pitch-${pitch}-${Date.now()}`, trackId, trackMonarcParams);
-  }, [trackId, trackSynth, trackMonarcParams]);
+    startNotePreview(engine.getAudioContext(), dest, trackSynth, { pitch, velocity }, key ?? `pitch-${pitch}-${Date.now()}`, trackId, trackMonarcParams, trackDrumParams);
+  }, [trackId, trackSynth, trackMonarcParams, trackDrumParams]);
 
   const ensureAudio = useCallback(() => {
     void engine.resumeContext();
