@@ -536,9 +536,8 @@ function drawWaveform(canvas: HTMLCanvasElement, buffer: AudioBuffer, clip: Clip
   const beatsToSamples = (beats: number) => beats * (sampleRate * 60) / bpm;
   const bufferOffsetSamples = beatsToSamples(clip.bufferOffsetBeats ?? 0);
   const clipDurationSamples = beatsToSamples(clip.durationBeats);
-  const sampleStart = Math.min(Math.max(0, Math.floor(bufferOffsetSamples)), Math.max(0, totalSamples - 1));
-  const maxWindowSamples = Math.max(1, totalSamples - sampleStart);
-  const clipSampleLength = Math.min(Math.max(1, Math.floor(clipDurationSamples)), maxWindowSamples);
+  const sampleStart = Math.max(0, Math.floor(bufferOffsetSamples));
+  const clipSampleLength = Math.max(1, Math.floor(clipDurationSamples));
 
   ctx.clearRect(0, 0, width, height);
   ctx.fillStyle = 'rgba(255, 255, 255, 0.6)';
@@ -548,21 +547,24 @@ function drawWaveform(canvas: HTMLCanvasElement, buffer: AudioBuffer, clip: Clip
   // the canvas clips anything scaled past its bounds.
   const gain = clip.clipGain ?? 1;
   for (let x = 0; x < width; x++) {
-    // Map canvas x position to sample range
+    // Map canvas x position to sample range, in beat-space so the waveform
+    // stays time-aligned with the fades and playhead. Columns past the end
+    // of the audio draw nothing (empty tail), like classic DAWs.
     const samplePosStart = sampleStart + Math.floor((x / width) * clipSampleLength);
     const samplePosEnd = sampleStart + Math.floor(((x + 1) / width) * clipSampleLength);
-    
+
     let minVal = 0;
     let maxVal = 0;
-    const from = Math.min(samplePosStart, totalSamples - 1);
-    const to = Math.max(from, Math.min(samplePosEnd, totalSamples));
-    for (let s = from; s < Math.max(from + 1, to); s++) {
+    const from = Math.max(sampleStart, Math.min(samplePosStart, totalSamples - 1));
+    const to = Math.max(from + 1, Math.min(samplePosEnd, totalSamples));
+    for (let s = from; s < to; s++) {
       for (const ch of channels) {
         const v = ch[s] ?? 0;
         if (v > maxVal) maxVal = v;
         if (v < minVal) minVal = v;
       }
     }
+    if (samplePosStart >= totalSamples) continue;
     const yTop = mid * (1 - maxVal * gain);
     const yBot = mid * (1 - minVal * gain);
     ctx.fillRect(x, yTop, 1, Math.max(1, yBot - yTop));
