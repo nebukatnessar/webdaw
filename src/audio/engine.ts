@@ -13,6 +13,7 @@ import {
 import {
   getOrCreateGateNode,
   cleanupGateNode,
+  ensureGateWorkletRegistered,
   getDefaultGateSettings,
 } from './gate';
 import {
@@ -341,6 +342,7 @@ export function getAudioContext(): AudioContext {
   if (!audioCtx) {
     audioCtx = new AudioContext();
     void loadBundledIRs(audioCtx);
+    void ensureGateWorkletRegistered(audioCtx);
   }
   return audioCtx;
 }
