@@ -535,9 +535,9 @@ function drawWaveform(canvas: HTMLCanvasElement, buffer: AudioBuffer, clip: Clip
   const beatsToSamples = (beats: number) => beats * (sampleRate * 60) / bpm;
   const bufferOffsetSamples = beatsToSamples(clip.bufferOffsetBeats ?? 0);
   const clipDurationSamples = beatsToSamples(clip.durationBeats);
-  const sampleStart = Math.floor(bufferOffsetSamples);
-  const sampleEnd = Math.min(totalSamples, Math.floor(bufferOffsetSamples + clipDurationSamples));
-  const clipSampleLength = sampleEnd - sampleStart;
+  const sampleStart = Math.min(Math.max(0, Math.floor(bufferOffsetSamples)), Math.max(0, totalSamples - 1));
+  const maxWindowSamples = Math.max(1, totalSamples - sampleStart);
+  const clipSampleLength = Math.min(Math.max(1, Math.floor(clipDurationSamples)), maxWindowSamples);
 
   ctx.clearRect(0, 0, width, height);
   ctx.fillStyle = 'rgba(255, 255, 255, 0.6)';
@@ -553,7 +553,9 @@ function drawWaveform(canvas: HTMLCanvasElement, buffer: AudioBuffer, clip: Clip
     
     let minVal = 0;
     let maxVal = 0;
-    for (let s = samplePosStart; s < samplePosEnd && s < totalSamples; s++) {
+    const from = Math.min(samplePosStart, totalSamples - 1);
+    const to = Math.max(from, Math.min(samplePosEnd, totalSamples));
+    for (let s = from; s < Math.max(from + 1, to); s++) {
       const v = channelData[s] ?? 0;
       if (v > maxVal) maxVal = v;
       if (v < minVal) minVal = v;
