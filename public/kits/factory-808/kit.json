@@ -1,0 +1,12 @@
+{
+  "id": "factory-808",
+  "name": "Factory 808",
+  "lanes": [
+    { "id": "kick", "label": "Kick", "file": "kick.wav", "pitch": 36, "chokeGroup": null },
+    { "id": "snare", "label": "Snare", "file": "snare.wav", "pitch": 38, "chokeGroup": null },
+    { "id": "clap", "label": "Clap", "file": "clap.wav", "pitch": 40, "chokeGroup": null },
+    { "id": "hihat-closed", "label": "Hi-Hat Closed", "file": "hihat-closed.wav", "pitch": 42, "chokeGroup": "hihat" },
+    { "id": "hihat-open", "label": "Hi-Hat Open", "file": "hihat-open.wav", "pitch": 46, "chokeGroup": "hihat" },
+    { "id": "tom", "label": "Tom", "file": "tom.wav", "pitch": 45, "chokeGroup": null }
+  ]
+}
