@@ -137,13 +137,14 @@ export default function PianoRollView() {
 
   const minDuration = gridDivisionBeats;
 
-  // Canvas coordinates: the canvas now sits below the sticky ruler, so its own
-  // top edge is row 0 (pitch 127).
+  // Canvas coordinates: use the canvas's own bounding rect, which already
+  // accounts for both scroll offsets and the sticky ruler margin - adding
+  // scrollTop again double-counted vertical scroll and shifted the pitch.
   const getPos = useCallback((e: React.MouseEvent | MouseEvent) => {
     const canvas = canvasRef.current!;
     const rect = canvas.getBoundingClientRect();
-    const x = e.clientX - rect.left + (scrollRef.current?.scrollLeft ?? 0);
-    const y = e.clientY - rect.top + (scrollRef.current?.scrollTop ?? 0) - RULER_HEIGHT;
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
     const beat = Math.max(0, x / pixelsPerBeat);
     const row = Math.floor(y / noteHeight);
     const pitch = Math.min(MAX_PITCH, Math.max(0, MAX_PITCH - row));
@@ -191,10 +192,10 @@ export default function PianoRollView() {
   // The ruler is now a sticky DOM strip (handleRulerMouseDown); the canvas
   // starts below it, so canvas clicks are always grid clicks.
   const scrubPlayheadTo = (clientX: number) => {
-    const scroll = scrollRef.current;
-    if (!scroll) return;
-    const rect = scroll.getBoundingClientRect();
-    const contentX = clientX - rect.left + scroll.scrollLeft;
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const rect = canvas.getBoundingClientRect();
+    const contentX = clientX - rect.left;
     const b = snapBeat(Math.max(0, contentX / pixelsPerBeat));
     if (isPlaying) {
       engine.seekDuringPlayback(useTrackStore.getState().tracks, b, useTransportStore.getState().bpm);
