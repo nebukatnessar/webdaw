@@ -436,6 +436,20 @@ export default function ClipBlock({ clip, showTakeLanes = false, isActiveTake = 
       const buffer = getBuffer(bufferId);
       if (!buffer) return false;
 
+      // Match the raster to the element's actual displayed size, so the CSS
+      // width/height stretch never rescales the drawing. Without this, the
+      // fixed 40px raster is stretched to the clip's real height and the
+      // waveform appears vertically zoomed (only its tops visible).
+      const dpr = window.devicePixelRatio || 1;
+      const cssWidth = Math.min(effectiveWidth, MAX_CANVAS_WIDTH);
+      const cssHeight = Math.max(1, Math.round(canvas.getBoundingClientRect().height || canvas.height / dpr));
+      const rasterWidth = Math.min(8192, Math.max(1, Math.round(cssWidth * dpr)));
+      const rasterHeight = Math.min(4096, Math.max(1, Math.round(cssHeight * dpr)));
+      if (canvas.width !== rasterWidth || canvas.height !== rasterHeight) {
+        canvas.width = rasterWidth;
+        canvas.height = rasterHeight;
+      }
+
       // Create a temporary clip object with the effective values for drawing
       const effectiveClip: Clip = {
         ...clip,
