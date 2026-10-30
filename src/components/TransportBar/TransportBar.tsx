@@ -6,6 +6,7 @@ import { useProjectStore } from '../../store/projectStore';
 import { useRecordingStore } from '../../store/recordingStore';
 import * as engine from '../../audio/engine';
 import * as recording from '../../audio/recording';
+import { detectTempoForClips } from '../../audio/tempoDetector';
 import { groupTakes } from '../../audio/takes';
 import ExportDialog from '../ExportDialog/ExportDialog';
 import ProjectDialog from '../ProjectDialog/ProjectDialog';
@@ -44,6 +45,7 @@ export default function TransportBar({ onTogglePianoRoll, pianoRollActive = fals
     setCountInBars,
   } = useRecordingStore();
 
+  const [detectingBpm, setDetectingBpm] = useState(false);
   const [showExportDialog, setShowExportDialog] = useState(false);
   const [showProjectDialog, setShowProjectDialog] = useState<false | 'save' | 'load' | 'new' | 'open'>(false);
   const [currentTheme, setCurrentTheme] = useState(getTheme());
@@ -301,6 +303,28 @@ export default function TransportBar({ onTogglePianoRoll, pianoRollActive = fals
 
   const handleExport = () => {
     setShowExportDialog(true);
+  };
+
+  const handleDetectBpm = () => {
+    const allClips = useTrackStore.getState().tracks.flatMap((t) => t.clips);
+    const selectedClipIds = new Set(useTrackStore.getState().selectedClipIds);
+    let candidates = allClips.filter((c) => selectedClipIds.has(c.id));
+    if (candidates.length === 0) candidates = allClips;
+    if (candidates.length === 0) return;
+
+    setDetectingBpm(true);
+    // Defer the analysis so the button can repaint its "Detecting…" state
+    // before the synchronous DSP work begins.
+    window.setTimeout(() => {
+      try {
+        const result = detectTempoForClips(candidates);
+        if (result && result.bpm >= 20 && result.bpm <= 300) {
+          setBpm(result.bpm);
+        }
+      } finally {
+        setDetectingBpm(false);
+      }
+    }, 0);
   };
 
   const handleSaveClick = () => {
@@ -592,6 +616,15 @@ export default function TransportBar({ onTogglePianoRoll, pianoRollActive = fals
           max={300}
           onChange={(e) => setBpm(Number(e.target.value))}
         />
+
+        <button
+          className={styles.btn + ' ' + styles.detectBtn}
+          onClick={handleDetectBpm}
+          disabled={detectingBpm}
+          title="Detect project tempo from audio"
+        >
+          {detectingBpm ? 'Detecting…' : 'Detect'}
+        </button>
 
         <label className={styles.bpmLabel} htmlFor="grid-input">Grid</label>
         <select

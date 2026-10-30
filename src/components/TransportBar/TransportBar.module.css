@@ -64,6 +64,17 @@
   appearance: textfield;
 }
 
+.detectBtn {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.detectBtn:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
 .divider {
   width: 1px;
   height: 20px;
