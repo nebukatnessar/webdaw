@@ -76,7 +76,12 @@ function attachWorklet(ctx: BaseAudioContext, chain: GateChain): void {
     channelInterpretation: 'speakers',
     outputChannelCount: [2],
   });
-  chain.input.disconnect(chain.output);
+  try {
+    chain.input.disconnect(chain.output);
+  } catch {
+    // The passthrough was never wired (chain created on an already-registered
+    // context), so there is nothing to undo.
+  }
   chain.input.connect(node);
   node.connect(chain.output);
   chain.processor = node;
