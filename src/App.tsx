@@ -10,12 +10,13 @@ import { useTransportStore } from './store/transportStore';
 import Toast from './components/Toast/Toast';
 import ProgressModal from './components/ProgressModal/ProgressModal';
 import PianoRollView from './components/PianoRollView/PianoRollView';
+import StepSequencer from './components/StepSequencer/StepSequencer';
 import { useMidiStore } from './store/midiStore';
 import { handleKeyDown } from './keyboard/keyboardShortcuts';
 
-// Which lower workspace panel is shown: the arrange timeline or the MIDI
-// piano roll (feature #26).
-type ViewMode = 'arrange' | 'pianoRoll';
+// Which lower workspace panel is shown: the arrange timeline, the MIDI
+// piano roll (feature #26), or the drum step sequencer (#197).
+type ViewMode = 'arrange' | 'pianoRoll' | 'stepSequencer';
 
 function App() {
   const [viewMode, setViewMode] = useState<ViewMode>('arrange');
@@ -203,6 +204,8 @@ function App() {
       <TransportBar
         onTogglePianoRoll={() => setViewMode((v) => (v === 'arrange' ? 'pianoRoll' : 'arrange'))}
         pianoRollActive={viewMode === 'pianoRoll'}
+        onToggleStepSequencer={() => setViewMode((v) => (v === 'stepSequencer' ? 'arrange' : 'stepSequencer'))}
+        stepSequencerActive={viewMode === 'stepSequencer'}
       />
       <div className={styles.workspace}>
         {viewMode === 'arrange' ? (
@@ -218,8 +221,10 @@ function App() {
             <ArrangeView scrollRef={arrangeRef} onScroll={onArrangeScroll} />
             <MasterFader />
           </>
-        ) : (
+        ) : viewMode === 'pianoRoll' ? (
           <PianoRollView />
+        ) : (
+          <StepSequencer />
         )}
       </div>
       {toast && <Toast message={toast.message} onClose={() => setToast(null)} key={toast.key} />}

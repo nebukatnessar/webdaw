@@ -16,9 +16,11 @@ import type { Project } from '../../types/daw';
 interface TransportBarProps {
   onTogglePianoRoll?: () => void;
   pianoRollActive?: boolean;
+  onToggleStepSequencer?: () => void;
+  stepSequencerActive?: boolean;
 }
 
-export default function TransportBar({ onTogglePianoRoll, pianoRollActive = false }: TransportBarProps) {
+export default function TransportBar({ onTogglePianoRoll, pianoRollActive = false, onToggleStepSequencer, stepSequencerActive = false }: TransportBarProps) {
   const { bpm, isPlaying, playheadBeats, isRepeat, isSnapEnabled, gridDivisionBeats, zoomLevel, selectionStart, selectionEnd, masterVolume, setBpm, play, pause, stop, setPlayheadBeats, toggleRepeat, toggleSnap, setGridDivisionBeats } =
     useTransportStore();
   const tracks = useTrackStore((s) => s.tracks);
@@ -666,6 +668,16 @@ export default function TransportBar({ onTogglePianoRoll, pianoRollActive = fals
           title="Toggle the MIDI piano roll editor (double-click a track header to jump straight to its notes)"
         >
           🎹 Piano Roll
+        </button>
+
+        <button
+          className={styles.btn + ' ' + (stepSequencerActive ? styles.active : '')}
+          onClick={onToggleStepSequencer}
+          disabled={!onToggleStepSequencer}
+          aria-label="Toggle step sequencer"
+          title="Toggle the drum step sequencer grid (#197)"
+        >
+          🥁 Steps
         </button>
 
         {/* Theme toggle buttons */}
