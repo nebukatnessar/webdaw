@@ -5,7 +5,7 @@ import { useMidiStore } from '../../store/midiStore';
 import { useTransportStore } from '../../store/transportStore';
 import * as engine from '../../audio/engine';
 import { startNotePreview } from '../../audio/midiSynth';
-import { getCachedKit, indexKitLanes, loadDrumKit } from '../../audio/drumKits';
+import { BUNDLED_KIT_IDS, BUNDLED_KIT_LABELS, getCachedKit, indexKitLanes, loadDrumKit } from '../../audio/drumKits';
 
 // Step sequencer grid for drum tracks (feature #194, task #197): an 808/909
 // style editor - one lane per drum voice/sample slot, 16 steps default (32/64
@@ -177,6 +177,24 @@ export default function StepSequencer() {
         >
           {STEP_OPTIONS.map((n) => <option key={n} value={n}>{n} steps</option>)}
         </select>
+        {track.synth === 'drum' && (
+          <>
+            <span>Kit:</span>
+            <select
+              value={track.drumKitId ?? ''}
+              onChange={(e) => {
+                useTrackStore.getState().updateTrack(trackId, { drumKitId: e.target.value || undefined });
+              }}
+              aria-label="Drum kit"
+              title="Bundled sample kit for the drum lanes (Synthesized = DSP voices)"
+            >
+              <option value="">Synthesized</option>
+              {BUNDLED_KIT_IDS.map((id) => (
+                <option key={id} value={id}>{BUNDLED_KIT_LABELS[id] ?? id}</option>
+              ))}
+            </select>
+          </>
+        )}
         <span className={styles.hint}>Click steps · Shift-click = accent · drag on lit steps for velocity · keys 1-6 toggle at playhead · ←/→ nudge</span>
       </div>
       <div

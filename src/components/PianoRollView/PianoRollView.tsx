@@ -7,7 +7,6 @@ import { BEATS_PER_BAR, MIN_TOTAL_BARS, TIMELINE_MARGIN_BARS } from '../../const
 import * as engine from '../../audio/engine';
 import { startNotePreview, stopNotePreview } from '../../audio/midiSynth';
 import { SYNTH_LABELS, type SynthId } from '../../audio/workletSynth';
-import { BUNDLED_KIT_IDS, BUNDLED_KIT_LABELS } from '../../audio/drumKits';
 import SynthPanel from './SynthPanel';
 import type { MidiNote, SynthId as TrackSynthId } from '../../types/daw';
 
@@ -585,25 +584,6 @@ export default function PianoRollView() {
             <option key={id} value={id}>{SYNTH_LABELS[id]}</option>
           ))}
         </select>
-        {trackSynth === 'drum' && (
-          <>
-            <span>Kit:</span>
-            <select
-              value={trackDrumKitId ?? ''}
-              onChange={(e) => {
-                if (trackId) useTrackStore.getState().updateTrack(trackId, { drumKitId: e.target.value || undefined });
-              }}
-              disabled={!trackId}
-              aria-label="Drum kit"
-              title="Bundled sample kit for drum lanes (empty = synthesized voices)"
-            >
-              <option value="">Synthesized</option>
-              {BUNDLED_KIT_IDS.map((id) => (
-                <option key={id} value={id}>{BUNDLED_KIT_LABELS[id] ?? id}</option>
-              ))}
-            </select>
-          </>
-        )}
         <button
           className={tool === 'draw' ? styles.toolActive : ''}
           onClick={() => setTool('draw')}
