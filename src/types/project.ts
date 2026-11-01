@@ -42,8 +42,9 @@ export interface SerializedTrack {
   volume: number; // 0–1
   pan: number;    // -1 to 1
   color: string;
-  synth?: string; // 'base' | 'monarch' | 'fm'; absent in older projects
+  synth?: string; // 'base' | 'monarch' | 'fm' | 'drum'; absent in older projects
   monarcParams?: Record<string, number | string>; // Monarc knob values; absent = defaults
+  drumKitId?: string; // bundled sample kit id for 'drum' tracks; absent = synthesized voices
   recordingMode?: 'layered' | 'multiTake';
   showAllTakes?: boolean;
   clips: SerializedClip[];

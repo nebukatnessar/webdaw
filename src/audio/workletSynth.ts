@@ -5,12 +5,13 @@
 // port messages.
 import type { MidiNote } from '../types/daw';
 
-export type SynthId = 'base' | 'monarch' | 'fm';
+export type SynthId = 'base' | 'monarch' | 'fm' | 'drum';
 
 export const SYNTH_LABELS: Record<SynthId, string> = {
   base: 'Base Saw',
   monarch: 'Monarc Bass (webMonarc)',
   fm: 'FM Synth',
+  drum: 'Drum Machine',
 };
 
 const WORKLET_URL_PATH = 'worklets/synth-processor.js';
