@@ -188,15 +188,17 @@ function startSynthVoice(
     const engine = getDrumEngine(ctx, options.trackId, destination, options.drumParams);
     const kitId = options.drumKitId;
     if (kitId) {
-      const lane = getKitLaneByPitch(kitId, pitch);
-      const loaded = lane ? getCachedKit(kitId) : undefined;
-      if (lane && loaded) {
-        void loaded.then((l) => {
-          const buffer = l.buffers.get(lane.id);
-          if (buffer) engine.triggerSample(lane, buffer, velocity / 127, options.when);
-        }).catch(() => undefined);
-        return { stop: () => undefined };
-      }
+      // Kick off the kit load if it hasn't started (e.g. preview before the
+      // sequencer's preload effect ran); once it resolves, hits on sample
+      // lanes play the one-shots. Until then the hit is dropped rather than
+      // falling back to a synth voice on a sample lane.
+      const loaded = getCachedKit(kitId) ?? loadDrumKit(ctx, kitId);
+      void loaded.then((l) => {
+        const lane = getKitLaneByPitch(kitId, pitch);
+        const buffer = lane ? l.buffers.get(lane.id) : undefined;
+        if (lane && buffer) engine.triggerSample(lane, buffer, velocity / 127, options.when);
+      }).catch(() => undefined);
+      return { stop: () => undefined };
     }
     const drumVoice = pitchToDrumVoice(pitch);
     if (drumVoice) {

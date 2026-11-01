@@ -20,6 +20,15 @@ export interface LoadedDrumKit {
 const kitCache = new Map<string, Promise<LoadedDrumKit>>();
 const laneIndexCache = new Map<string, Map<number, DrumKitLane>>();
 
+// Loading one kit also populates the pitch index as soon as it resolves, so
+// lane lookup works regardless of which caller awaits the load first.
+function cacheKit(kitId: string, promise: Promise<LoadedDrumKit>): Promise<LoadedDrumKit> {
+  kitCache.set(kitId, promise);
+  void promise.then((loaded) => indexKitLanes(loaded)).catch(() => undefined);
+  promise.catch(() => kitCache.delete(kitId));
+  return promise;
+}
+
 function kitBaseUrl(kitId: string): string {
   return `${import.meta.env.BASE_URL}kits/${kitId}`;
 }
@@ -34,7 +43,7 @@ export function loadDrumKit(ctx: BaseAudioContext, kitId: string): Promise<Loade
   if (cached) return cached;
 
   const baseUrl = kitBaseUrl(kitId);
-  const promise = new Promise<LoadedDrumKit>((resolve, reject) => {
+  return cacheKit(kitId, new Promise<LoadedDrumKit>((resolve, reject) => {
     let worker: Worker;
     try {
       worker = new Worker(`${import.meta.env.BASE_URL}workers/decode-kit-worker.js`);
@@ -72,11 +81,7 @@ export function loadDrumKit(ctx: BaseAudioContext, kitId: string): Promise<Loade
     };
     worker.onerror = (e) => { cleanup(); reject(new Error(e.message)); };
     worker.postMessage({ type: 'decodeKit', baseUrl, manifestUrl: `${baseUrl}/kit.json` });
-  });
-
-  kitCache.set(kitId, promise);
-  promise.catch(() => kitCache.delete(kitId));
-  return promise;
+  }));
 }
 
 /** Lane lookup by MIDI pitch for a kit id (cached after first load). */
